@@ -8,7 +8,7 @@ export interface ITaskStorage {
   listTasks(filters?: {
     status?: Task["status"];
     assignedTo?: string;
-    parentTaskId?: string;
+    ids?: string[];
   }): Promise<Task[]>;
   initialize(): Promise<void>;
 }

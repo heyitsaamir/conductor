@@ -13,17 +13,32 @@ export class TaskService {
     description: string,
     createdBy: Agent,
     assignedTo?: Agent,
-    parentTaskId?: string
+    parentId?: string
   ): Promise<Task> {
+    if (parentId) {
+      const parentTask = await this.storage.getTask(parentId);
+      if (!parentTask) {
+        throw new Error("Parent task not found");
+      }
+    }
+
     const task = await this.storage.createTask({
       title,
       description,
       status: "Todo",
       createdBy,
       assignedTo,
-      parentTaskId,
+      subTaskIds: [],
       executionLogs: [],
     });
+
+    if (parentId) {
+      const parentTask = await this.storage.getTask(parentId);
+      await this.storage.updateTask(parentId, {
+        subTaskIds: [...parentTask!.subTaskIds, task.id],
+      });
+    }
+
     return task;
   }
 
@@ -52,12 +67,34 @@ export class TaskService {
   async listTasks(filters?: {
     status?: Task["status"];
     assignedTo?: string;
-    parentTaskId?: string;
   }): Promise<Task[]> {
     return this.storage.listTasks(filters);
   }
 
   async deleteTask(id: string): Promise<boolean> {
+    // First, remove this task from any parent's subTaskIds
+    const allTasks = await this.listTasks();
+    const parentTasks = allTasks.filter((task) => task.subTaskIds.includes(id));
+
+    for (const parent of parentTasks) {
+      await this.storage.updateTask(parent.id, {
+        subTaskIds: parent.subTaskIds.filter((subtaskId) => subtaskId !== id),
+      });
+    }
+
     return this.storage.deleteTask(id);
+  }
+
+  async getSubtasks(taskId: string): Promise<Task[]> {
+    const task = await this.storage.getTask(taskId);
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    if (task.subTaskIds.length === 0) {
+      return [];
+    }
+
+    return this.storage.listTasks({ ids: task.subTaskIds });
   }
 }

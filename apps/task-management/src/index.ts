@@ -27,14 +27,13 @@ const errorHandler = (
 // Create a new task
 app.post("/tasks", async (req, res, next) => {
   try {
-    const { title, description, createdBy, assignedTo, parentTaskId } =
-      req.body;
+    const { title, description, createdBy, assignedTo, parentId } = req.body;
     const task = await taskService.createTask(
       title,
       description,
       createdBy,
       assignedTo,
-      parentTaskId
+      parentId
     );
     res.status(201).json(task);
   } catch (err) {
@@ -56,15 +55,24 @@ app.get("/tasks/:id", async (req, res, next) => {
   }
 });
 
+// Get subtasks for a task
+app.get("/tasks/:id/subtasks", async (req, res, next) => {
+  try {
+    const subtasks = await taskService.getSubtasks(req.params.id);
+    res.json(subtasks);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // List tasks with optional filters
 app.get("/tasks", async (req, res, next) => {
   try {
-    const { status, assignedTo, parentTaskId } = req.query;
+    const { status, assignedTo } = req.query;
     const filters: any = {};
 
     if (status) filters.status = status;
     if (assignedTo) filters.assignedTo = assignedTo;
-    if (parentTaskId) filters.parentTaskId = parentTaskId;
 
     const tasks = await taskService.listTasks(filters);
     res.json(tasks);

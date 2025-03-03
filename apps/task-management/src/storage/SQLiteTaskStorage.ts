@@ -14,20 +14,18 @@ export class SQLiteTaskStorage implements ITaskStorage {
       this.db.serialize(() => {
         this.db.run(
           `
-                    CREATE TABLE IF NOT EXISTS tasks (
-                        id TEXT PRIMARY KEY,
-                        title TEXT NOT NULL,
-                        description TEXT,
-                        status TEXT NOT NULL,
-                        assignedTo TEXT,
-                        createdBy TEXT NOT NULL,
-                        parentTaskId TEXT,
-                        createdAt TEXT NOT NULL,
-                        updatedAt TEXT NOT NULL,
-                        executionLogs TEXT,
-                        FOREIGN KEY (parentTaskId) REFERENCES tasks(id)
-                    )
-                `,
+          CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL,
+            assignedTo TEXT,
+            createdBy TEXT NOT NULL,
+            subTaskIds TEXT,
+            createdAt TEXT NOT NULL,
+            updatedAt TEXT NOT NULL,
+            executionLogs TEXT
+          )`,
           (err) => {
             if (err) reject(err);
             else resolve();
@@ -52,9 +50,9 @@ export class SQLiteTaskStorage implements ITaskStorage {
     return new Promise((resolve, reject) => {
       this.db.run(
         `INSERT INTO tasks (
-                    id, title, description, status, assignedTo, createdBy,
-                    parentTaskId, createdAt, updatedAt, executionLogs
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, title, description, status, assignedTo, createdBy,
+          subTaskIds, createdAt, updatedAt, executionLogs
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           newTask.id,
           newTask.title,
@@ -62,7 +60,7 @@ export class SQLiteTaskStorage implements ITaskStorage {
           newTask.status,
           newTask.assignedTo?.id,
           newTask.createdBy.id,
-          newTask.parentTaskId,
+          JSON.stringify(newTask.subTaskIds),
           newTask.createdAt.toISOString(),
           newTask.updatedAt.toISOString(),
           JSON.stringify(newTask.executionLogs || []),
@@ -107,15 +105,15 @@ export class SQLiteTaskStorage implements ITaskStorage {
     return new Promise((resolve, reject) => {
       this.db.run(
         `UPDATE tasks SET 
-                    title = ?, description = ?, status = ?, assignedTo = ?,
-                    parentTaskId = ?, updatedAt = ?, executionLogs = ?
-                WHERE id = ?`,
+          title = ?, description = ?, status = ?, assignedTo = ?,
+          subTaskIds = ?, updatedAt = ?, executionLogs = ?
+        WHERE id = ?`,
         [
           updatedTask.title,
           updatedTask.description,
           updatedTask.status,
           updatedTask.assignedTo?.id,
-          updatedTask.parentTaskId,
+          JSON.stringify(updatedTask.subTaskIds),
           updatedTask.updatedAt.toISOString(),
           JSON.stringify(updatedTask.executionLogs || []),
           id,
@@ -140,7 +138,7 @@ export class SQLiteTaskStorage implements ITaskStorage {
   async listTasks(filters?: {
     status?: Task["status"];
     assignedTo?: string;
-    parentTaskId?: string;
+    ids?: string[];
   }): Promise<Task[]> {
     let query = "SELECT * FROM tasks WHERE 1=1";
     const params: any[] = [];
@@ -153,9 +151,9 @@ export class SQLiteTaskStorage implements ITaskStorage {
       query += " AND assignedTo = ?";
       params.push(filters.assignedTo);
     }
-    if (filters?.parentTaskId) {
-      query += " AND parentTaskId = ?";
-      params.push(filters.parentTaskId);
+    if (filters?.ids && filters.ids.length > 0) {
+      query += ` AND id IN (${filters.ids.map(() => "?").join(",")})`;
+      params.push(...filters.ids);
     }
 
     return new Promise((resolve, reject) => {
@@ -181,7 +179,7 @@ export class SQLiteTaskStorage implements ITaskStorage {
         ? await this.getAgent(row.assignedTo)
         : undefined,
       createdBy: await this.getAgent(row.createdBy),
-      parentTaskId: row.parentTaskId,
+      subTaskIds: row.subTaskIds ? JSON.parse(row.subTaskIds) : [],
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
       executionLogs: row.executionLogs
