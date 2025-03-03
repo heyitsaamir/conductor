@@ -105,6 +105,12 @@ http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
   res.status(200).send("ok");
 });
 
+http.post("/channelMessage", jsonParser, async (req: any, res: any) => {
+  console.log("channelMessage");
+  console.log(req.body);
+  res.status(200).send("ok");
+});
+
 (async () => {
   await app.start(+(process.env.PORT || 3000));
 })();
