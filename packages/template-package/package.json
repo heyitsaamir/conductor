@@ -1,0 +1,15 @@
+{
+  "name": "template-package",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Use this app as a template for your new package",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
