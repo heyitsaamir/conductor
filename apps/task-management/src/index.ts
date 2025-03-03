@@ -1,8 +1,8 @@
+import { Agent } from "@repo/task-management-interfaces";
 import express from "express";
 import path from "path";
-import { TaskService } from "./TaskService";
-import { Agent } from "./interfaces";
 import { SQLiteTaskStorage } from "./storage/SQLiteTaskStorage";
+import { TaskService } from "./TaskService";
 
 const app = express();
 app.use(express.json());

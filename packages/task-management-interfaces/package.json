@@ -1,0 +1,15 @@
+{
+  "name": "@repo/task-management-interfaces",
+  "version": "1.0.0",
+  "types": "dist/interfaces.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --emitDeclarationOnly",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

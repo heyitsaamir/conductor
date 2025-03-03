@@ -1,5 +1,5 @@
+import { Agent, Task } from "@repo/task-management-interfaces";
 import { Database } from "sqlite3";
-import { Agent, Task } from "../interfaces";
 import { ITaskStorage } from "./ITaskStorage";
 
 export class SQLiteTaskStorage implements ITaskStorage {

@@ -1,4 +1,4 @@
-import { Task } from "../interfaces";
+import { Task } from "@repo/task-management-interfaces";
 
 export interface ITaskStorage {
   createTask(task: Omit<Task, "id" | "createdAt" | "updatedAt">): Promise<Task>;

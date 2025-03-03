@@ -1,4 +1,4 @@
-import { Agent, Task } from "./interfaces";
+import { Agent, Task } from "@repo/task-management-interfaces";
 import { ITaskStorage } from "./storage/ITaskStorage";
 
 export class TaskService {
