@@ -63,15 +63,15 @@ provision:
 # Runs after `provision` during Start Debugging (F5) or run manually using `teamsfx deploy --env local`.
 deploy:
   # Install any dependencies and build the web app using NPM
-  - uses: cli/runNpmCommand
-    name: install dependencies
-    with:
-        args: install --no-audit --workspaces=false
+  # - uses: cli/runNpmCommand
+  #   name: install dependencies
+  #   with:
+  #       args: install --no-audit --workspaces=false
   # Provides the Teams Toolkit .env file values to the apps runtime so they can be accessed with `process.env`.
   - uses: file/createOrUpdateEnvironmentFile
     with:
         target: ./.env
         envs:
-          PORT: 3978
+          PORT: 3000
           CLIENT_ID: ${{BOT_ID}}
           CLIENT_SECRET: ${{SECRET_BOT_PASSWORD}}
