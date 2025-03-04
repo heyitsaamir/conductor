@@ -95,7 +95,7 @@ export type ExactMessage<T extends Capability<any, any>> =
 
 interface DelegatedInitiator {
   type: "delegate";
-  url: string;
+  id: string;
 }
 
 interface TeamsInitiator {

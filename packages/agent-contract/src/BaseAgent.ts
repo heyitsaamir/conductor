@@ -53,7 +53,7 @@ abstract class BaseAgent<T extends Capability<any, any>> implements Agent<T> {
     const recipient: MessageInitiator =
       initiator.type === "teams"
         ? { type: "teams" as const, conversationId: initiator.conversationId }
-        : { type: "delegate" as const, url: initiator.url };
+        : { type: "delegate" as const, id: initiator.id };
 
     logger.debug(`Calculated recipient for message`, {
       class: this.constructor.name,
@@ -61,7 +61,7 @@ abstract class BaseAgent<T extends Capability<any, any>> implements Agent<T> {
       recipientType: recipient.type,
       ...("conversationId" in recipient
         ? { conversationId: recipient.conversationId }
-        : { url: recipient.url }),
+        : { id: recipient.id }),
     });
 
     return recipient;
