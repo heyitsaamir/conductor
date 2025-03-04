@@ -48,10 +48,10 @@ const consoleTransport = new winston.transports.Console({
       const { timestamp, level, message, ...args } = info;
 
       const formattedMessage =
-        typeof message === "object" ? JSON.stringify(message) : message;
+        typeof message === "object" ? JSON.stringify(message) : String(message);
 
       const argsStr = Object.keys(args).length
-        ? " " + JSON.stringify(args)
+        ? " " + JSON.stringify(args, null, 2)
         : "";
 
       return `${timestamp} ${level}: ${formattedMessage}${argsStr}`;
