@@ -1,11 +1,12 @@
+import { MessageSendActivity } from "@microsoft/spark.api";
+import { App, HttpPlugin } from "@microsoft/spark.apps";
+import { DevtoolsPlugin } from "@microsoft/spark.dev";
 import { Message, MessageInitiator, Runtime } from "@repo/agent-contract";
 import { logger } from "@repo/common";
-import { MessageSendActivity } from "@teams.sdk/api";
-import { App, HttpPlugin } from "@teams.sdk/apps";
-import { DevtoolsPlugin } from "@teams.sdk/dev";
 import bodyParser from "body-parser";
 import cors from "cors";
 import { ConductorAgent } from "./conductorAgent";
+import { conductorState } from "./conductorState";
 import { KNOWN_AGENTS } from "./constants";
 
 const http = new HttpPlugin();
@@ -42,15 +43,37 @@ const fakeRuntime: Runtime = {
         });
       }
     } else {
-      throw new Error("Unsupported recipient type");
+      if (message.type === "do") {
+        throw new Error("Unsupported message type");
+      }
+      switch (message.status) {
+        case "success":
+          await app.send(recipient.conversationId, {
+            type: "message",
+            text: message.result.message,
+          });
+          break;
+        case "error":
+          await app.send(recipient.conversationId, {
+            type: "message",
+            text: message.error.message,
+          });
+          break;
+        case "needs_clarification":
+          await app.send(recipient.conversationId, {
+            type: "message",
+            text: message.clarification.message,
+          });
+          break;
+      }
     }
   },
   receiveMessage: async (message: Message, sender: MessageInitiator) => {
     logger.info("receiveMessage", message, sender);
     if (message.type === "do") {
-      await conductorAgent.onMessage(message as any);
+      await conductorAgent.onMessage(message as any, sender);
     } else {
-      await conductorAgent.onMessage(message);
+      await conductorAgent.onMessage(message as any, sender);
     }
   },
 };
@@ -60,10 +83,16 @@ conductorAgent = new ConductorAgent(fakeRuntime);
 // Configure CORS
 http.use(cors());
 
-app.on("message", async ({ send, activity }) => {
-  await send({ type: "typing" });
-  console.log("message", activity);
-  await send(`you said "${activity.text}"`);
+app.on("message", async ({ activity }) => {
+  const stateForConversation = Object.values(conductorState).find(
+    (state) => state.conversationId === activity.conversation.id
+  );
+  if (stateForConversation) {
+    await conductorAgent.addUserMessage(
+      activity.text,
+      stateForConversation.currentTaskId
+    );
+  }
 });
 
 http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
@@ -159,11 +188,11 @@ http.post("/recv", jsonParser, async (req: any, res: any) => {
     res.status(400).send("x-sender-id header is required");
     return;
   }
+  res.status(200).send("ok");
   await fakeRuntime.receiveMessage(req.body, {
     id: sender,
     type: "delegate",
   });
-  res.status(200).send("ok");
 });
 
 (async () => {
@@ -175,11 +204,16 @@ http.post("/recv", jsonParser, async (req: any, res: any) => {
         type: "do",
         taskId: "123",
         method: "handleMessage",
-        params: { message: "build a web application" },
+        params: {
+          message: "build a web application",
+          conversationId:
+            "a:1-nplMamMMXmQm_VavY4ZWTJMhYuHDLdqKRi0YqzWY9PKphppVFaI7rOrnj54pvKcTRkSH8-K-xNwhEia3sLFl86LmeTaTfnxLAOJKixU6nBTNTgTQKLsa_zPb1Ju3gq3",
+        },
       },
       {
         type: "teams",
-        conversationId: "19:1d2b41a25f934efcbc4d442d896c0f43@thread.tacv2",
+        conversationId:
+          "a:1-nplMamMMXmQm_VavY4ZWTJMhYuHDLdqKRi0YqzWY9PKphppVFaI7rOrnj54pvKcTRkSH8-K-xNwhEia3sLFl86LmeTaTfnxLAOJKixU6nBTNTgTQKLsa_zPb1Ju3gq3",
       }
     );
   };

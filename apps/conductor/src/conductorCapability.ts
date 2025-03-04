@@ -3,6 +3,7 @@ import { z } from "zod";
 
 const ConductorInput = z.object({
   message: z.string(),
+  conversationId: z.string(),
 });
 
 export type ConductorInputType = z.infer<typeof ConductorInput>;
