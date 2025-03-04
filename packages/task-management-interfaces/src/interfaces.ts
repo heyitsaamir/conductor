@@ -11,8 +11,8 @@ export interface Task {
   title: string;
   description: string;
   status: TaskStatus;
-  assignedTo?: Agent;
-  createdBy: Agent;
+  assignedTo?: string;
+  createdBy: string;
   subTaskIds: string[];
   parentId?: string;
   createdAt: Date;

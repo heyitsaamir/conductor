@@ -1,4 +1,3 @@
-import { Agent } from "@repo/task-management-interfaces";
 import express from "express";
 import path from "path";
 import { SQLiteTaskStorage } from "./storage/SQLiteTaskStorage";
@@ -95,7 +94,7 @@ app.patch("/tasks/:id/status", async (req, res, next) => {
 // Assign task to agent
 app.patch("/tasks/:id/assign", async (req, res, next) => {
   try {
-    const agent: Agent = req.body;
+    const agent: string = req.body;
     const task = await taskService.assignTask(req.params.id, agent);
     res.json(task);
   } catch (err) {

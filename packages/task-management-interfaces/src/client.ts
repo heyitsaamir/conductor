@@ -1,4 +1,4 @@
-import { Agent, Task, TaskStatus } from "./interfaces";
+import { Task, TaskStatus } from "./interfaces";
 
 export interface TaskFilters {
   status?: TaskStatus;
@@ -9,7 +9,7 @@ export type CreateTaskInput = Pick<
   Task,
   "title" | "description" | "createdBy"
 > & {
-  assignedTo?: Agent;
+  assignedTo?: string;
   parentId?: string;
 };
 
@@ -73,7 +73,7 @@ export class TaskManagementClient {
     });
   }
 
-  async assignTask(id: string, agent: Agent): Promise<Task> {
+  async assignTask(id: string, agent: string): Promise<Task> {
     return this.request<Task>(`/tasks/${id}/assign`, {
       method: "PATCH",
       body: JSON.stringify(agent),

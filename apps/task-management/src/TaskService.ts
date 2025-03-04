@@ -1,4 +1,4 @@
-import { Agent, Task } from "@repo/task-management-interfaces";
+import { Task } from "@repo/task-management-interfaces";
 import { ITaskStorage } from "./storage/ITaskStorage";
 
 export class TaskService {
@@ -11,8 +11,8 @@ export class TaskService {
   async createTask(
     title: string,
     description: string,
-    createdBy: Agent,
-    assignedTo?: Agent,
+    createdBy: string,
+    assignedTo?: string,
     parentId?: string
   ): Promise<Task> {
     if (parentId) {
@@ -26,8 +26,8 @@ export class TaskService {
       title,
       description,
       status: "Todo",
-      createdBy,
-      assignedTo,
+      createdBy: createdBy,
+      assignedTo: assignedTo,
       subTaskIds: [],
       executionLogs: [],
       parentId,
@@ -51,7 +51,7 @@ export class TaskService {
     return this.storage.updateTask(id, { status });
   }
 
-  async assignTask(id: string, agent: Agent): Promise<Task> {
+  async assignTask(id: string, agent: string): Promise<Task> {
     return this.storage.updateTask(id, { assignedTo: agent });
   }
 
@@ -96,6 +96,10 @@ export class TaskService {
       return [];
     }
 
-    return this.storage.listTasks({ ids: task.subTaskIds });
+    const subTasks = await this.storage.listTasks({ ids: task.subTaskIds });
+    // order then in the same way as task.subTaskIds
+    return subTasks.sort(
+      (a, b) => task.subTaskIds.indexOf(a.id) - task.subTaskIds.indexOf(b.id)
+    );
   }
 }

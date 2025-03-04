@@ -1,5 +1,5 @@
 import { logger } from "@repo/common";
-import { Agent, Task } from "@repo/task-management-interfaces";
+import { Task } from "@repo/task-management-interfaces";
 import { Database } from "sqlite3";
 import { ITaskStorage } from "./ITaskStorage";
 
@@ -23,6 +23,7 @@ export class SQLiteTaskStorage implements ITaskStorage {
             assignedTo TEXT,
             createdBy TEXT NOT NULL,
             subTaskIds TEXT,
+            parentId TEXT,
             createdAt TEXT NOT NULL,
             updatedAt TEXT NOT NULL,
             executionLogs TEXT
@@ -52,16 +53,17 @@ export class SQLiteTaskStorage implements ITaskStorage {
       this.db.run(
         `INSERT INTO tasks (
           id, title, description, status, assignedTo, createdBy,
-          subTaskIds, createdAt, updatedAt, executionLogs
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          subTaskIds, parentId, createdAt, updatedAt, executionLogs
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           newTask.id,
           newTask.title,
           newTask.description,
           newTask.status,
-          newTask.assignedTo?.id,
-          newTask.createdBy.id,
+          newTask.assignedTo,
+          newTask.createdBy,
           JSON.stringify(newTask.subTaskIds),
+          newTask.parentId,
           newTask.createdAt.toISOString(),
           newTask.updatedAt.toISOString(),
           JSON.stringify(newTask.executionLogs || []),
@@ -118,7 +120,7 @@ export class SQLiteTaskStorage implements ITaskStorage {
           updatedTask.title,
           updatedTask.description,
           updatedTask.status,
-          updatedTask.assignedTo?.id,
+          updatedTask.assignedTo,
           JSON.stringify(updatedTask.subTaskIds),
           updatedTask.updatedAt.toISOString(),
           JSON.stringify(updatedTask.executionLogs || []),
@@ -181,26 +183,15 @@ export class SQLiteTaskStorage implements ITaskStorage {
       title: row.title,
       description: row.description,
       status: row.status,
-      assignedTo: row.assignedTo
-        ? await this.getAgent(row.assignedTo)
-        : undefined,
-      createdBy: await this.getAgent(row.createdBy),
+      assignedTo: row.assignedTo,
+      createdBy: row.createdBy,
+      parentId: row.parentId,
       subTaskIds: row.subTaskIds ? JSON.parse(row.subTaskIds) : [],
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
       executionLogs: row.executionLogs
         ? JSON.parse(row.executionLogs)
         : undefined,
-    };
-  }
-
-  private async getAgent(id: string): Promise<Agent> {
-    // Note: In a real implementation, this would fetch from an agents table
-    // For now, we'll return a mock agent
-    return {
-      id,
-      name: "Agent",
-      webhookAddress: "http://localhost:3000",
     };
   }
 }
