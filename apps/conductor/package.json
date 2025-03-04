@@ -19,6 +19,8 @@
     "dev:teamsfx:launch-testtool": "npx env-cmd --silent -f env/.env.testtool teamsapptester start"
   },
   "dependencies": {
+    "@repo/agent-contract": "^1.0.0",
+    "@repo/common": "^1.0.0",
     "@teams.sdk/api": "latest",
     "@teams.sdk/apps": "latest",
     "@teams.sdk/cards": "latest",
