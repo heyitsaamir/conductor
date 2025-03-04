@@ -6,19 +6,12 @@ import {
   TaskManagementClient,
 } from "@repo/task-management-interfaces";
 import { conductor } from "./conductorCapability";
+import { KNOWN_AGENTS } from "./constants";
 import { Planner } from "./planner";
 import { WorkflowExecutor } from "./workflowExecutor";
 type SupportedCapability = typeof conductor;
 
 type AgentMessage = ExactMessage<SupportedCapability>;
-
-const KNOWN_AGENTS: Agent[] = [
-  {
-    id: "lead-qualification",
-    name: "Lead Qualification",
-    webhookAddress: "http://localhost:4000/recv",
-  },
-];
 
 const SELF_AGENT: Agent = {
   id: "conductor",
@@ -38,7 +31,8 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     );
     this.workflowExecutor = new WorkflowExecutor(
       this.taskManagementClient,
-      this.runtime
+      this.runtime,
+      KNOWN_AGENTS
     );
   }
 
@@ -78,21 +72,22 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     const savedParentTask = await this.taskManagementClient.createTask({
       title: taskPlan.title,
       description: taskPlan.description,
-      createdBy: SELF_AGENT,
+      createdBy: SELF_AGENT.id,
+      assignedTo: SELF_AGENT.id,
     });
 
     // Save all subtasks first
-    const savedSubTasks = await Promise.all(
-      taskPlan.subTasks.map(async (task) => {
-        const response = await this.taskManagementClient.createTask({
-          title: task.title,
-          description: task.description,
-          createdBy: SELF_AGENT,
-          parentId: savedParentTask.id,
-        });
-        return response;
-      })
-    );
+    const savedSubTasks = [];
+    for (const task of taskPlan.subTasks) {
+      const response = await this.taskManagementClient.createTask({
+        title: task.title,
+        description: task.description,
+        createdBy: SELF_AGENT.id,
+        parentId: savedParentTask.id,
+        assignedTo: task.executor.id,
+      });
+      savedSubTasks.push(response);
+    }
 
     logger.info("Plan saved", {
       parentTask: savedParentTask,

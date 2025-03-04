@@ -1,13 +1,19 @@
 import { DidRequest, Runtime } from "@repo/agent-contract";
-import { Task, TaskManagementClient } from "@repo/task-management-interfaces";
-
+import { logger } from "@repo/common";
+import {
+  Agent,
+  Task,
+  TaskManagementClient,
+} from "@repo/task-management-interfaces";
 export class WorkflowExecutor {
   constructor(
     private taskManagementClient: TaskManagementClient,
-    private runtime: Runtime
+    private runtime: Runtime,
+    private knownAgents: Agent[]
   ) {}
 
   async continueWorkflow(taskIdArg: string | Task): Promise<void> {
+    logger.info("Continuing workflow", { taskIdArg });
     let task: Task;
 
     if (typeof taskIdArg === "string") {
@@ -57,6 +63,9 @@ export class WorkflowExecutor {
             `Subtask ${task.title} completed with result: ${message.result.message}`
           );
         }
+        if (parentTask) {
+          await this.continueWorkflow(parentTask);
+        }
         break;
       case "error":
         await this.taskManagementClient.updateTaskStatus(taskId, "Blocked");
@@ -80,9 +89,15 @@ export class WorkflowExecutor {
     const isFirstMessage = task.executionLogs?.length === 0;
     if (isFirstMessage && parentTask) {
       if (parentTask) {
+        const agent = this.knownAgents.find(
+          (agent) => agent.id === task.assignedTo
+        );
+        if (!agent) {
+          throw new Error(`Agent ${parentTask.assignedTo} not found`);
+        }
         await this.taskManagementClient.addExecutionLog(
           parentTask.id,
-          `[${task.assignedTo?.name}] - ${task.description}`
+          `[${agent.name}] - ${task.description}`
         );
       }
       await this.taskManagementClient.addExecutionLog(
@@ -97,7 +112,7 @@ export class WorkflowExecutor {
     if (!task.assignedTo) {
       throw new Error("Task assignedTo is undefined");
     }
-
+    logger.info("Executing task", { task });
     const response = await this.runtime.sendMessage(
       {
         type: "do",
@@ -110,7 +125,7 @@ export class WorkflowExecutor {
       },
       {
         type: "delegate",
-        url: task.assignedTo.webhookAddress,
+        id: task.assignedTo,
       }
     );
     return response;

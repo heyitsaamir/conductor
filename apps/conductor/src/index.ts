@@ -1,10 +1,12 @@
-import { Message, Runtime } from "@repo/agent-contract";
+import { Message, MessageInitiator, Runtime } from "@repo/agent-contract";
+import { logger } from "@repo/common";
 import { MessageSendActivity } from "@teams.sdk/api";
 import { App, HttpPlugin } from "@teams.sdk/apps";
 import { DevtoolsPlugin } from "@teams.sdk/dev";
 import bodyParser from "body-parser";
 import cors from "cors";
 import { ConductorAgent } from "./conductorAgent";
+import { KNOWN_AGENTS } from "./constants";
 
 const http = new HttpPlugin();
 const jsonParser = bodyParser.json();
@@ -16,11 +18,35 @@ const app = new App({
 let conductorAgent: ConductorAgent;
 
 const fakeRuntime: Runtime = {
-  sendMessage: async (message: Message) => {
-    console.log("sendMessage", message);
+  sendMessage: async (message: Message, recipient: MessageInitiator) => {
+    if (recipient.type === "delegate") {
+      const agent = KNOWN_AGENTS.find((agent) => agent.id === recipient.id);
+      if (!agent) {
+        throw new Error(`Agent ${recipient.id} not found`);
+      }
+      logger.info("Sending message to agent", agent);
+      const result = await fetch(agent.webhookAddress, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-sender-id": "conductor",
+        },
+        body: JSON.stringify(message),
+      });
+      if (!result.ok) {
+        logger.error("Failed to send message to agent", {
+          agent: agent.id,
+          message: message,
+          status: result.status,
+          statusText: result.statusText,
+        });
+      }
+    } else {
+      throw new Error("Unsupported recipient type");
+    }
   },
-  receiveMessage: async (message: Message) => {
-    console.log("receiveMessage", message);
+  receiveMessage: async (message: Message, sender: MessageInitiator) => {
+    logger.info("receiveMessage", message, sender);
     if (message.type === "do") {
       await conductorAgent.onMessage(message as any);
     } else {
@@ -128,19 +154,34 @@ http.post("/channelMessage", jsonParser, async (req: any, res: any) => {
 });
 
 http.post("/recv", jsonParser, async (req: any, res: any) => {
-  await fakeRuntime.receiveMessage(req.body);
+  const sender: string | undefined = req.headers["x-sender-id"] as string;
+  if (!sender) {
+    res.status(400).send("x-sender-id header is required");
+    return;
+  }
+  await fakeRuntime.receiveMessage(req.body, {
+    id: sender,
+    type: "delegate",
+  });
   res.status(200).send("ok");
 });
 
 (async () => {
-  await fakeRuntime.receiveMessage({
-    type: "do",
-    taskId: "123",
-    method: "handleMessage",
-    params: {
-      taskId: "123",
-      message: "test",
-    },
-  });
-  await app.start(+(process.env.PORT || 3000));
+  // Pause for 2 seconds, then send a message to the lead qualification agent
+  const testSend = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await fakeRuntime.receiveMessage(
+      {
+        type: "do",
+        taskId: "123",
+        method: "handleMessage",
+        params: { message: "build a web application" },
+      },
+      {
+        type: "teams",
+        conversationId: "19:1d2b41a25f934efcbc4d442d896c0f43@thread.tacv2",
+      }
+    );
+  };
+  await Promise.all([app.start(+(process.env.PORT || 3000)), testSend()]);
 })();
