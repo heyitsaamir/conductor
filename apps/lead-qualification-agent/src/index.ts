@@ -1,6 +1,6 @@
+import { App, HttpPlugin } from "@microsoft/spark.apps";
 import { Message, MessageInitiator, Runtime } from "@repo/agent-contract";
 import { logger } from "@repo/common";
-import { App, HttpPlugin } from "@teams.sdk/apps";
 import bodyParser from "body-parser";
 const http = new HttpPlugin();
 const jsonParser = bodyParser.json();
@@ -12,6 +12,17 @@ export const KNOWN_AGENTS = [
     webhookAddress: "http://localhost:3000/recv",
   },
 ];
+
+interface State {
+  [taskId: string]: {
+    messages: {
+      role: "user" | "assistant" | "system";
+      content: string;
+    }[];
+  };
+}
+
+const state: State = {};
 
 class AgentRuntime implements Runtime {
   sendMessage = async (message: Message, recipient: MessageInitiator) => {
@@ -43,17 +54,44 @@ class AgentRuntime implements Runtime {
   };
   receiveMessage = async (message: Message, sender: MessageInitiator) => {
     logger.info("receiveMessage", message);
-    this.sendMessage(
-      {
-        type: "did",
-        result: {
-          message: "Done!",
-        },
-        status: "success",
-        taskId: message.taskId,
-      },
-      sender
-    );
+    if (message.type === "do") {
+      const messages = state[message.taskId]?.messages ?? [];
+      messages.push({
+        role: "user",
+        content: message.params!.message,
+      });
+      state[message.taskId] = {
+        messages,
+      };
+      logger.info("messages", messages);
+      if (messages.length < 2) {
+        this.sendMessage(
+          {
+            type: "did",
+            status: "needs_clarification",
+            taskId: message.taskId,
+            clarification: {
+              message: `I need more information (original message: ${messages.at(-1)?.content}) (index: ${messages.length}) (taskId: ${message.taskId})`,
+            },
+          },
+          sender
+        );
+      } else {
+        this.sendMessage(
+          {
+            type: "did",
+            status: "success",
+            taskId: message.taskId,
+            result: {
+              message: "Done!",
+            },
+          },
+          sender
+        );
+      }
+    } else {
+      throw new Error("Unsupported message type");
+    }
   };
 }
 
