@@ -11,7 +11,8 @@
   "license": "ISC",
   "description": "Common utilities for the repo",
   "dependencies": {
-    "winston": "^3.17.0"
+    "winston": "^3.17.0",
+    "winston-console-format": "^1.0.8"
   },
   "devDependencies": {
     "typescript": "^5.0.0"

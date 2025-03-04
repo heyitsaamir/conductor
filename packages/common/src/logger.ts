@@ -1,4 +1,5 @@
 import winston from "winston";
+import { consoleFormat } from "winston-console-format";
 
 // Custom log levels with abbreviations
 const customLevels = {
@@ -36,25 +37,19 @@ interface CustomLogger {
 
 // Create the console transport with appropriate settings
 const consoleTransport = new winston.transports.Console({
-  silent: process.env.NODE_ENV === "test", // Silence in test environment
   format: winston.format.combine(
-    winston.format.colorize({
-      all: true,
-    }),
-    winston.format.timestamp({
-      format: "HH:mm:ss",
-    }),
-    winston.format.printf((info) => {
-      const { timestamp, level, message, ...args } = info;
-
-      const formattedMessage =
-        typeof message === "object" ? JSON.stringify(message) : String(message);
-
-      const argsStr = Object.keys(args).length
-        ? " " + JSON.stringify(args, null, 2)
-        : "";
-
-      return `${timestamp} ${level}: ${formattedMessage}${argsStr}`;
+    winston.format.colorize({ all: true }),
+    winston.format.padLevels(),
+    consoleFormat({
+      showMeta: true,
+      metaStrip: ["timestamp", "service"],
+      inspectOptions: {
+        depth: Infinity,
+        colors: true,
+        maxArrayLength: Infinity,
+        breakLength: 120,
+        compact: Infinity,
+      },
     })
   ),
 });
@@ -62,6 +57,14 @@ const consoleTransport = new winston.transports.Console({
 const logger = winston.createLogger({
   levels: customLevels.levels,
   level: "DBG",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.ms(),
+    winston.format.errors({ stack: true }),
+    winston.format.splat(),
+    winston.format.json()
+  ),
+  defaultMeta: { service: "Test" },
   transports: [consoleTransport],
   silent: process.env.NODE_ENV === "test", // Also silence at logger level for extra safety
 }) as unknown as winston.Logger &
