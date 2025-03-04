@@ -1,3 +1,4 @@
+import { logger } from "@repo/common";
 import { Agent, Task } from "@repo/task-management-interfaces";
 import { Database } from "sqlite3";
 import { ITaskStorage } from "./ITaskStorage";
@@ -46,7 +47,7 @@ export class SQLiteTaskStorage implements ITaskStorage {
       createdAt: new Date(now),
       updatedAt: new Date(now),
     };
-
+    logger.info("Creating task", { newTask });
     return new Promise((resolve, reject) => {
       this.db.run(
         `INSERT INTO tasks (
@@ -66,8 +67,13 @@ export class SQLiteTaskStorage implements ITaskStorage {
           JSON.stringify(newTask.executionLogs || []),
         ],
         (err) => {
-          if (err) reject(err);
-          else resolve(newTask);
+          if (err) {
+            logger.error("Error creating task", { err });
+            reject(err);
+          } else {
+            logger.info("Task created", { newTask });
+            resolve(newTask);
+          }
         }
       );
     });

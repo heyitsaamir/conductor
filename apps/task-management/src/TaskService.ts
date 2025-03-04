@@ -30,6 +30,7 @@ export class TaskService {
       assignedTo,
       subTaskIds: [],
       executionLogs: [],
+      parentId,
     });
 
     if (parentId) {
