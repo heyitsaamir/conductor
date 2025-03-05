@@ -42,6 +42,9 @@ export class AgentHandler extends BaseAgent<typeof HandleMessageCapability> {
 
       logger.info("messages", messages);
 
+      // add an artificial 2s delay
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
       if (messages.length < 2) {
         await this.runtime.sendMessage(
           {

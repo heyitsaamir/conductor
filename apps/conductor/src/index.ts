@@ -113,23 +113,35 @@ conductorAgent = new ConductorAgent(fakeRuntime);
 // Configure CORS
 http.use(cors());
 
-app.on("message", async ({ activity }) => {
-  const activityText = activity.text.replace(/^<at>[^<]+<\/at>/g, "").trim();
+const prepareActivityText = (activity: string) => {
+  return activity.replace(/^<at>[^<]+<\/at>/g, "").trim();
+};
+
+const receiveMessageFromTeams = async (
+  activityText: string,
+  conversationId: string
+) => {
+  const text = prepareActivityText(activityText);
   await fakeRuntime.receiveMessage(
     {
       type: "do",
       taskId: "123", // For brand new tasks, there is no task id, so we need a constant here
       method: "handleMessage",
       params: {
-        message: activityText,
-        conversationId: activity.conversation.id,
+        message: text,
+        conversationId: conversationId,
       },
     },
     {
       type: "teams",
-      conversationId: activity.conversation.id,
+      conversationId: conversationId,
     }
   );
+};
+
+app.on("message", async ({ activity }) => {
+  logger.info("Receive message from teams");
+  await receiveMessageFromTeams(activity.text, activity.conversation.id);
 });
 
 http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
@@ -213,9 +225,77 @@ http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
   res.status(200).send("ok");
 });
 
+/**
+ * Example body (this is for the main conversation post in a channel)
+ * {
+  '@odata.context': "https://graph.microsoft.com/v1.0/$metadata#teams('345b198c-159d-4291-b7f2-deb8aa311b58')/channels('19%3AsdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1%40thread.tacv2')/messages/$entity",
+  id: '1741207930461',
+  replyToId: '1741207930461',
+  etag: '1741207930461',
+  messageType: 'message',
+  createdDateTime: '2025-03-05T20:52:10.461Z',
+  lastModifiedDateTime: '2025-03-05T20:52:10.461Z',
+  lastEditedDateTime: null,
+  deletedDateTime: null,
+  subject: 'New post 3',
+  summary: null,
+  chatId: null,
+  importance: 'normal',
+  locale: 'en-us',
+  webUrl: 'https://teams.microsoft.com/l/message/19%3AsdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1%40thread.tacv2/1741207930461?groupId=345b198c-159d-4291-b7f2-deb8aa311b58&tenantId=36f749a1-4343-4fe1-8c10-3607afa94209&createdTime=1741207930461&parentMessageId=1741207930461',
+  policyViolation: null,
+  eventDetail: null,
+  from: {
+    application: null,
+    device: null,
+    user: {
+      '@odata.type': '#microsoft.graph.teamworkUserIdentity',
+      id: 'd4851876-1c70-4f6e-bfbc-8b2ceeccc8d3',
+      displayName: 'Aamir Jawaid',
+      userIdentityType: 'aadUser',
+      tenantId: '36f749a1-4343-4fe1-8c10-3607afa94209'
+    }
+  },
+  body: {
+    contentType: 'html',
+    content: '<p>Test</p>',
+    plainTextContent: 'Test'
+  },
+  channelIdentity: {
+    teamId: '345b198c-159d-4291-b7f2-deb8aa311b58',
+    channelId: '19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2'
+  },
+  attachments: [],
+  mentions: [],
+  reactions: [],
+  messageLink: 'https://teams.microsoft.com/l/message/19%3AsdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1%40thread.tacv2/1741207930461?groupId=345b198c-159d-4291-b7f2-deb8aa311b58&tenantId=36f749a1-4343-4fe1-8c10-3607afa94209&createdTime=1741207930461&parentMessageId=1741207930461',
+  threadType: 'channel',
+  teamId: '345b198c-159d-4291-b7f2-deb8aa311b58',
+  channelId: '19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2'
+}
+ */
 http.post("/channelMessage", jsonParser, async (req: any, res: any) => {
-  console.log("channelMessage");
-  console.log(req.body);
+  logger.info("Receive channel message");
+  const {
+    replyToId: parentMessageId,
+    body: { plainTextContent },
+    channelId,
+    from: { user },
+  }: {
+    replyToId: string;
+    body: { content: string; plainTextContent: string };
+    channelId: string;
+    from: { user: { id: string } };
+  } = req.body;
+  if (user == null) {
+    logger.info("Ignore message from bot");
+    // ignore messages from bots for now
+    res.status(200).send("ok");
+    return;
+  }
+  const conversationId = `${channelId};messageid=${parentMessageId}`;
+  const activityText = prepareActivityText(plainTextContent);
+  await receiveMessageFromTeams(activityText, conversationId);
   res.status(200).send("ok");
 });
 

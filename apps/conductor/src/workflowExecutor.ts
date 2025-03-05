@@ -32,7 +32,6 @@ export class WorkflowExecutor {
     }
 
     const subTasks = await this.taskManagementClient.getSubtasks(task.id);
-
     if (this.isTaskTerminal(task)) {
       logger.info("Task is terminal, skipping", { task });
       return "completed";
@@ -118,6 +117,23 @@ export class WorkflowExecutor {
     const taskState = await this.conductorState.getStateByTaskId(task.id);
     if (!taskState) {
       throw new Error("Task state not found");
+    }
+    if (taskState.messages.length === 1) {
+      // Send it to Teams
+      await this.runtime.sendMessage(
+        {
+          type: "did",
+          status: "success",
+          taskId: task.id,
+          result: {
+            message: `${taskState.messages[0].content}`,
+          },
+        },
+        {
+          type: "teams",
+          conversationId: taskState.conversationId,
+        }
+      );
     }
     const lastMessage = taskState.messages.at(-1);
     if (!lastMessage) {

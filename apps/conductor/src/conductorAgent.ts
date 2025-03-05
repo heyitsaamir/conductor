@@ -105,7 +105,31 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
         []
       );
     }
+
+    let subTasksMessage = "";
+    for (let i = 0; i < subTasks.length; i++) {
+      subTasksMessage += ` ${i + 1}. ${subTasks[i].description}\n`;
+    }
+
+    const planMessage = `I have created a plan for you:
+Task: ${parentTask.description}
+Subtasks:
+${subTasksMessage}
+    `;
+
+    await this.runtime.sendMessage(
+      {
+        type: "did",
+        status: "success",
+        taskId: parentTask.id,
+        result: {
+          message: planMessage,
+        },
+      },
+      { type: "teams", conversationId: message.params.conversationId }
+    );
     await this.workflowExecutor.continueWorkflow(parentTask.id);
+    await this.handleWorkflowCompletion(parentTask.id);
   }
 
   async getTasksForConversation(conversationId: string) {
@@ -131,7 +155,30 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
             content: message.result.message ?? "Done!",
           });
         }
+        const taskState = await conductorState.getStateByTaskId(message.taskId);
+        if (!taskState) {
+          logger.error("No task state found for task", {
+            taskId: message.taskId,
+          });
+          break;
+        }
+        await this.runtime.sendMessage(
+          {
+            type: "did",
+            status: "success",
+            taskId: message.taskId,
+            result: {
+              message: message.result.message ?? "Done!",
+            },
+          },
+          {
+            type: "teams",
+            conversationId: taskState.conversationId,
+            byAgentId: updatedTask.assignedTo,
+          }
+        );
         await this.workflowExecutor.continueWorkflow(updatedTask.id);
+        await this.handleWorkflowCompletion(updatedTask.id);
         break;
       }
       case "error": {
@@ -145,6 +192,28 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
             content: message.error.message ?? "There was an error",
           });
         }
+        const taskState = await conductorState.getStateByTaskId(message.taskId);
+        if (!taskState) {
+          logger.error("No task state found for task", {
+            taskId: message.taskId,
+          });
+          break;
+        }
+        await this.runtime.sendMessage(
+          {
+            type: "did",
+            status: "success",
+            taskId: message.taskId,
+            result: {
+              message: message.error.message ?? "There was an error",
+            },
+          },
+          {
+            type: "teams",
+            conversationId: taskState.conversationId,
+            byAgentId: updatedTask.assignedTo,
+          }
+        );
         break;
       }
       case "needs_clarification": {
@@ -208,6 +277,40 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     }
   }
 
+  async handleWorkflowCompletion(taskId: string) {
+    const taskState = await conductorState.getStateByTaskId(taskId);
+    if (!taskState) {
+      logger.error("No task state found for task", {
+        taskId: taskId,
+      });
+      return;
+    }
+    // Make sure this is the parent
+    let task = await this.taskManagementClient.getTask(taskId);
+    if (task.parentId) {
+      logger.info("Handling completion for a subtask, getting the parent task");
+      task = await this.taskManagementClient.getTask(task.parentId);
+    }
+    if (task.status !== "Done") {
+      logger.info("Task is not done", {
+        taskId: taskId,
+      });
+      return;
+    }
+
+    await this.runtime.sendMessage(
+      {
+        type: "did",
+        status: "success",
+        taskId: taskId,
+        result: {
+          message: "All tasks were completed successfully.",
+        },
+      },
+      { type: "teams", conversationId: taskState.conversationId }
+    );
+  }
+
   async answerClarification(
     message: string,
     taskId: string
@@ -243,6 +346,7 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
       });
     }
     await this.workflowExecutor.continueWorkflow(blockedTask.id);
+    await this.handleWorkflowCompletion(blockedTask.id);
   }
 
   async buildAndSavePlan(task: string): Promise<{
