@@ -114,13 +114,14 @@ conductorAgent = new ConductorAgent(fakeRuntime);
 http.use(cors());
 
 app.on("message", async ({ activity }) => {
+  const activityText = activity.text.replace(/^<at>[^<]+<\/at>/g, "").trim();
   await fakeRuntime.receiveMessage(
     {
       type: "do",
       taskId: "123", // For brand new tasks, there is no task id, so we need a constant here
       method: "handleMessage",
       params: {
-        message: activity.text,
+        message: activityText,
         conversationId: activity.conversation.id,
       },
     },
@@ -233,25 +234,5 @@ http.post("/recv", jsonParser, async (req: any, res: any) => {
 
 (async () => {
   // Pause for 2 seconds, then send a message to the lead qualification agent
-  const testSend = async () => {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    await fakeRuntime.receiveMessage(
-      {
-        type: "do",
-        taskId: "123",
-        method: "handleMessage",
-        params: {
-          message: "build a web application",
-          conversationId:
-            "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2;messageid=1741185195826",
-        },
-      },
-      {
-        type: "teams",
-        conversationId:
-          "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2;messageid=1741185195826",
-      }
-    );
-  };
-  await Promise.all([app.start(+(process.env.PORT || 3000)), testSend()]);
+  await app.start(+(process.env.PORT || 3000));
 })();
