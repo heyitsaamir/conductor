@@ -67,11 +67,18 @@ app.get("/tasks/:id/subtasks", async (req, res, next) => {
 // List tasks with optional filters
 app.get("/tasks", async (req, res, next) => {
   try {
-    const { status, assignedTo } = req.query;
+    const { status, assignedTo, ids } = req.query;
     const filters: any = {};
 
     if (status) filters.status = status;
     if (assignedTo) filters.assignedTo = assignedTo;
+    if (ids) {
+      if (typeof ids !== "string") {
+        res.status(400).json({ error: "ids must be a string" });
+        return;
+      }
+      filters.ids = ids.split(",");
+    }
 
     const tasks = await taskService.listTasks(filters);
     res.json(tasks);

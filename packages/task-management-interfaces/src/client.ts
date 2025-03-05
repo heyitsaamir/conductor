@@ -3,6 +3,7 @@ import { Task, TaskStatus } from "./interfaces";
 export interface TaskFilters {
   status?: TaskStatus;
   assignedTo?: string;
+  ids?: string[];
 }
 
 export type CreateTaskInput = Pick<
@@ -61,6 +62,7 @@ export class TaskManagementClient {
     const params = new URLSearchParams();
     if (filters.status) params.set("status", filters.status);
     if (filters.assignedTo) params.set("assignedTo", filters.assignedTo);
+    if (filters.ids) params.set("ids", filters.ids.join(","));
 
     const query = params.toString();
     return this.request<Task[]>(`/tasks${query ? `?${query}` : ""}`);

@@ -1,25 +1,21 @@
 import path from "path";
 import { SQLiteConductorStorage } from "./storage/SQLiteConductorStorage";
 
-export interface ConductorStateData {
-  taskId: string;
-  messages: {
-    role: "user" | "assistant" | "system";
-    content: string;
-  }[];
-  currentTaskId: string;
-  currentStatus:
-    | "todo"
-    | "in-progress"
-    | "completed"
-    | "failed"
-    | "waiting_for_user";
+export interface ConversationMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+export interface ConversationStateData {
+  stateId: string;
   conversationId: string;
-  parentTaskId: string | null;
+  messages: ConversationMessage[];
+  taskId: string;
+  createdAt: number;
 }
 
 export interface ConductorState {
-  [taskId: string]: ConductorStateData;
+  [stateId: string]: ConversationStateData;
 }
 
 export class ConductorStateManager {
@@ -40,60 +36,74 @@ export class ConductorStateManager {
     return ConductorStateManager.instance;
   }
 
-  async getState(taskId: string): Promise<ConductorStateData | null> {
-    return this.storage.getState(taskId);
+  async getConversationState(
+    stateId: string
+  ): Promise<ConversationStateData | null> {
+    return this.storage.getConversationState(stateId);
   }
 
-  async setState(
+  async getStateByTaskId(
+    taskId: string
+  ): Promise<ConversationStateData | null> {
+    return this.storage.findStateByTaskId(taskId);
+  }
+
+  async setConversationState(
     taskId: string,
-    state: Omit<ConductorStateData, "taskId">
-  ): Promise<void> {
-    const fullState: ConductorStateData = {
+    conversationId: string,
+    messages: ConversationMessage[]
+  ): Promise<ConversationStateData> {
+    const stateId = `${taskId}-${Date.now()}`;
+    const state: ConversationStateData = {
+      stateId,
+      conversationId,
       taskId,
-      ...state,
+      messages,
+      createdAt: Date.now(),
     };
-    return this.storage.setState(taskId, fullState);
-  }
 
-  // Helper methods used by other files
-  async findStateByConversationId(
-    conversationId: string
-  ): Promise<ConductorStateData | null> {
-    return this.storage.findByConversationId(conversationId);
-  }
-
-  async updateStatus(
-    taskId: string,
-    status: ConductorStateData["currentStatus"]
-  ): Promise<void> {
-    const state = await this.getState(taskId);
-    if (state) {
-      await this.setState(taskId, {
-        ...state,
-        currentStatus: status,
-      });
-    }
+    await this.storage.setConversationState(stateId, state);
+    return state;
   }
 
   async addMessage(
     taskId: string,
-    message: { role: "user" | "assistant" | "system"; content: string }
-  ): Promise<void> {
-    const state = await this.getState(taskId);
-    if (state) {
-      await this.setState(taskId, {
-        ...state,
-        messages: [...state.messages, message],
-      });
+    message: ConversationMessage
+  ): Promise<ConversationStateData | null> {
+    const state = await this.getStateByTaskId(taskId);
+    if (!state) {
+      return null;
     }
+
+    // Update the existing state with the new message
+    const updatedMessages = [...state.messages, message];
+    await this.storage.updateMessages(state.stateId, updatedMessages);
+
+    // Return the updated state
+    return {
+      ...state,
+      messages: updatedMessages,
+    };
   }
 
-  async getParentState(taskId: string): Promise<ConductorStateData | null> {
-    const state = await this.getState(taskId);
-    if (state?.parentTaskId) {
-      return this.getState(state.parentTaskId);
+  async getConversationStates(
+    conversationId: string
+  ): Promise<ConversationStateData[]> {
+    return this.storage.findStatesByConversationId(conversationId);
+  }
+
+  async createInitialState(
+    taskId: string,
+    conversationId: string,
+    initialMessages: ConversationMessage[] = []
+  ): Promise<ConversationStateData> {
+    // Check if a state already exists for this task
+    const existingState = await this.getStateByTaskId(taskId);
+    if (existingState) {
+      throw new Error(`State already exists for task ID: ${taskId}`);
     }
-    return null;
+
+    return this.setConversationState(taskId, conversationId, initialMessages);
   }
 }
 

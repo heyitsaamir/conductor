@@ -68,6 +68,7 @@ export class TaskService {
   async listTasks(filters?: {
     status?: Task["status"];
     assignedTo?: string;
+    ids?: string[];
   }): Promise<Task[]> {
     return this.storage.listTasks(filters);
   }

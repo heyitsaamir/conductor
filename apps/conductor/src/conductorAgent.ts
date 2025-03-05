@@ -45,7 +45,30 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
   async onMessage(message: AgentMessage, initiator: MessageInitiator) {
     switch (message.type) {
       case "do":
-        await this.doConduct(message, initiator);
+        const existingTasks = await this.getTasksForConversation(
+          message.params.conversationId
+        );
+        if (existingTasks.length > 0) {
+          const tasks = await this.taskManagementClient.listTasks({
+            ids: existingTasks.map((task) => task.taskId),
+            status: "WaitingForUserResponse",
+          });
+          if (tasks.length === 1) {
+            await this.addUserMessage(message.params.message, tasks[0]);
+          } else if (tasks.length === 0) {
+            logger.error("No blocked tasks found for a do-message", {
+              conversationId: message.params.conversationId,
+            });
+          } else {
+            logger.error("Multiple blocked tasks found for a do-message", {
+              conversationId: message.params.conversationId,
+              tasks: tasks,
+            });
+            throw new Error("Multiple blocked tasks found for a do-message");
+          }
+        } else {
+          await this.doConduct(message, initiator);
+        }
         break;
       case "did":
         await this.didTask(message, initiator);
@@ -59,62 +82,60 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     const { parentTask, subTasks } = await this.buildAndSavePlan(
       message.params.message
     );
-    await conductorState.setState(parentTask.id, {
-      messages: [
+    await conductorState.createInitialState(
+      parentTask.id,
+      message.params.conversationId,
+      [
         {
           role: "user",
           content: message.params.message,
         },
-      ],
-      currentTaskId: parentTask.id,
-      currentStatus: "todo",
-      conversationId: message.params.conversationId,
-      parentTaskId: null,
-    });
+      ]
+    );
 
     for (const subTask of subTasks) {
-      await conductorState.setState(subTask.id, {
-        messages: [],
-        currentTaskId: subTask.id,
-        currentStatus: "todo",
-        conversationId: message.params.conversationId,
-        parentTaskId: parentTask.id,
-      });
+      await conductorState.createInitialState(
+        subTask.id,
+        message.params.conversationId,
+        []
+      );
     }
     await this.workflowExecutor.continueWorkflow(parentTask.id);
   }
 
+  async getTasksForConversation(conversationId: string) {
+    return await conductorState.getConversationStates(conversationId);
+  }
   async didTask(
     message: Extract<AgentMessage, { type: "did" }>,
-    initiator: MessageInitiator
+    _initiator: MessageInitiator
   ) {
-    await this.workflowExecutor.handleSubtaskResult(message.taskId, message);
+    const updatedTask = await this.workflowExecutor.handleSubtaskResult(
+      message.taskId,
+      message
+    );
     switch (message.status) {
       case "success": {
-        await conductorState.updateStatus(message.taskId, "completed");
         await conductorState.addMessage(message.taskId, {
           role: "assistant",
           content: message.result.message ?? "Done!",
         });
-        const state = await conductorState.getState(message.taskId);
-        if (state?.parentTaskId) {
-          await conductorState.addMessage(state.parentTaskId, {
+        if (updatedTask.parentId) {
+          await conductorState.addMessage(updatedTask.parentId, {
             role: "assistant",
             content: message.result.message ?? "Done!",
           });
-          await this.workflowExecutor.continueWorkflow(state.parentTaskId);
         }
+        await this.workflowExecutor.continueWorkflow(updatedTask.id);
         break;
       }
       case "error": {
-        await conductorState.updateStatus(message.taskId, "failed");
         await conductorState.addMessage(message.taskId, {
           role: "assistant",
           content: message.error.message ?? "There was an error",
         });
-        const state = await conductorState.getState(message.taskId);
-        if (state?.parentTaskId) {
-          await conductorState.addMessage(state.parentTaskId, {
+        if (updatedTask.parentId) {
+          await conductorState.addMessage(updatedTask.parentId, {
             role: "assistant",
             content: message.error.message ?? "There was an error",
           });
@@ -122,7 +143,7 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
         break;
       }
       case "needs_clarification": {
-        const state = await conductorState.getState(message.taskId);
+        const state = await conductorState.getStateByTaskId(message.taskId);
         if (!state) break;
 
         logger.info("Needs clarification", {
@@ -139,32 +160,14 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
             role: "user",
             content: result.answer,
           });
-          await this.runtime.sendMessage(
-            {
-              type: "do",
-              taskId: message.taskId,
-              method: "handleMessage",
-              params: {
-                message: result.answer,
-              },
-            },
-            this.getRecipient(initiator)
-          );
+          await this.workflowExecutor.continueSubtask(updatedTask);
         } else {
-          await conductorState.updateStatus(message.taskId, "waiting_for_user");
           await conductorState.addMessage(message.taskId, {
             role: "assistant",
             content: result.questionForUser,
           });
-          const parentState = await conductorState.getParentState(
-            message.taskId
-          );
-          if (parentState) {
-            await conductorState.updateStatus(
-              parentState.taskId,
-              "waiting_for_user"
-            );
-            await conductorState.addMessage(parentState.taskId, {
+          if (updatedTask.parentId) {
+            await conductorState.addMessage(updatedTask.parentId, {
               role: "assistant",
               content: result.questionForUser,
             });
@@ -200,7 +203,7 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
         questionForUser: string;
       }
   > {
-    const state = await conductorState.getState(taskId);
+    const state = await conductorState.getConversationStates(taskId);
     if (!state) {
       return { questionForUser: message };
     }
@@ -211,35 +214,19 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     };
   }
 
-  async addUserMessage(message: string, taskId: string) {
-    const taskState = await conductorState.getState(taskId);
-    if (!taskState) {
-      logger.error("Task state not found", { taskId });
-      return;
-    }
-
-    if (taskState.parentTaskId) {
-      logger.error("User messages should be handled by the parent task", {
-        taskId,
+  async addUserMessage(message: string, blockedTask: Task) {
+    // Add the message to the conversation state associated with the  blocked Task and also to the parent task if it exists
+    await conductorState.addMessage(blockedTask.id, {
+      role: "user",
+      content: message,
+    });
+    if (blockedTask.parentId) {
+      await conductorState.addMessage(blockedTask.parentId, {
+        role: "user",
+        content: message,
       });
-      return;
     }
-
-    const currentTask = await conductorState.getState(taskState.currentTaskId);
-    if (!currentTask) {
-      logger.error("Current task not found", { taskId });
-      return;
-    }
-    await conductorState.addMessage(taskId, {
-      role: "user",
-      content: message,
-    });
-    await conductorState.addMessage(currentTask.taskId, {
-      role: "user",
-      content: message,
-    });
-
-    await this.workflowExecutor.continueWorkflow(taskId);
+    await this.workflowExecutor.continueWorkflow(blockedTask.id);
   }
 
   async buildAndSavePlan(task: string): Promise<{

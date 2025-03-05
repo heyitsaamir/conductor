@@ -6,7 +6,6 @@ import { logger } from "@repo/common";
 import bodyParser from "body-parser";
 import cors from "cors";
 import { ConductorAgent } from "./conductorAgent";
-import { conductorState } from "./conductorState";
 import { KNOWN_AGENTS } from "./constants";
 
 const http = new HttpPlugin();
@@ -84,15 +83,21 @@ conductorAgent = new ConductorAgent(fakeRuntime);
 http.use(cors());
 
 app.on("message", async ({ activity }) => {
-  const stateForConversation = await conductorState.findStateByConversationId(
-    activity.conversation.id
+  await fakeRuntime.receiveMessage(
+    {
+      type: "do",
+      taskId: "123", // For brand new tasks, there is no task id, so we need a constant here
+      method: "handleMessage",
+      params: {
+        message: activity.text,
+        conversationId: activity.conversation.id,
+      },
+    },
+    {
+      type: "teams",
+      conversationId: activity.conversation.id,
+    }
   );
-  if (stateForConversation) {
-    await conductorAgent.addUserMessage(
-      activity.text,
-      stateForConversation.taskId
-    );
-  }
 });
 
 http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {

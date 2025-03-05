@@ -22,15 +22,19 @@ export class WorkflowExecutor {
       task = taskIdArg;
     }
 
-    const subTasks = await this.taskManagementClient.getSubtasks(task.id);
-
     if (!task) {
       throw new Error("Task not found");
     }
 
+    if (task.parentId) {
+      await this.continueSubtask(task);
+      return "in-progress";
+    }
+
+    const subTasks = await this.taskManagementClient.getSubtasks(task.id);
+
     if (this.isTaskTerminal(task)) {
       logger.info("Task is terminal, skipping", { task });
-      await this.conductorState.updateStatus(task.id, "completed");
       return "completed";
     }
 
@@ -40,8 +44,6 @@ export class WorkflowExecutor {
         taskId: task.id,
       });
       await this.taskManagementClient.updateTaskStatus(task.id, "Done");
-      await this.conductorState.updateStatus(task.id, "completed");
-      // TODO: inform user that the task was done
       return "completed";
     }
 
@@ -50,56 +52,55 @@ export class WorkflowExecutor {
   }
 
   async continueSubtask(task: Task) {
+    if (this.isTaskTerminal(task)) {
+      await this.taskManagementClient.updateTaskStatus(task.id, "Done");
+      if (task.parentId) {
+        await this.continueWorkflow(task.parentId);
+      }
+      return "completed";
+    }
     await this.prepareSubtaskForExecution(task);
     await this.executeTask(task);
+    return "in-progress";
   }
 
   async handleSubtaskResult(taskId: string, message: DidRequest) {
-    const task = await this.taskManagementClient.getTask(taskId);
-    const parentTask = task.parentId
-      ? await this.taskManagementClient.getTask(task.parentId)
-      : null;
-
     switch (message.status) {
       case "success":
-        await this.taskManagementClient.updateTaskStatus(taskId, "Done");
+        return await this.taskManagementClient.updateTaskStatus(taskId, "Done");
         break;
       case "error":
-        await this.taskManagementClient.updateTaskStatus(taskId, "Blocked");
-        if (parentTask) {
-          await this.conductorState.addMessage(parentTask.id, {
-            role: "assistant",
-            content: message.error.message ?? "There was an error",
-          });
-        }
+        return await this.taskManagementClient.updateTaskStatus(
+          taskId,
+          "Error"
+        );
         break;
       case "needs_clarification":
-        await this.taskManagementClient.updateTaskStatus(taskId, "Blocked");
-        await this.taskManagementClient.addExecutionLog(
+        return await this.taskManagementClient.updateTaskStatus(
           taskId,
-          message.clarification.message ?? "Needs clarification"
+          "WaitingForUserResponse"
         );
         break;
     }
   }
 
   private async prepareSubtaskForExecution(task: Task) {
-    const taskState = await this.conductorState.getState(task.id);
+    const taskState = await this.conductorState.getStateByTaskId(task.id);
     if (!taskState) return;
 
     const isFirstMessage = taskState.messages.length === 0;
     if (isFirstMessage) {
       const firstMessage: string = task.description; // TODO: Ask the llm to build the first message based on previous messages
-      const parentState = await this.conductorState.getParentState(task.id);
-      if (parentState) {
-        await this.conductorState.addMessage(parentState.taskId, {
-          role: "user",
-          content: firstMessage,
-        });
-        await this.conductorState.setState(parentState.taskId, {
-          ...parentState,
-          currentTaskId: task.id,
-        });
+      if (task.parentId) {
+        const parentState = await this.conductorState.getStateByTaskId(
+          task.parentId
+        );
+        if (parentState) {
+          await this.conductorState.addMessage(parentState.taskId, {
+            role: "user",
+            content: firstMessage,
+          });
+        }
       }
       await this.conductorState.addMessage(task.id, {
         role: "user",
@@ -107,7 +108,6 @@ export class WorkflowExecutor {
       });
     }
     await this.taskManagementClient.updateTaskStatus(task.id, "InProgress");
-    await this.conductorState.updateStatus(task.id, "in-progress");
   }
 
   private async executeTask(task: Task) {
@@ -115,7 +115,7 @@ export class WorkflowExecutor {
       throw new Error("Task assignedTo is undefined");
     }
     logger.info("Executing task", { task });
-    const taskState = await this.conductorState.getState(task.id);
+    const taskState = await this.conductorState.getStateByTaskId(task.id);
     if (!taskState) {
       throw new Error("Task state not found");
     }

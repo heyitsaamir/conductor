@@ -1,13 +1,12 @@
 import { Database } from "sqlite3";
-import { ConductorState, ConductorStateData } from "../conductorState";
+import { ConversationMessage, ConversationStateData } from "../conductorState";
 
-interface ConductorStateRow {
-  taskId: string;
-  messages: string;
-  currentTaskId: string;
-  currentStatus: string;
+interface ConversationStateRow {
+  stateId: string;
   conversationId: string;
-  parentTaskId: string | null;
+  messages: string;
+  taskId: string;
+  createdAt: number;
 }
 
 export class SQLiteConductorStorage {
@@ -21,36 +20,55 @@ export class SQLiteConductorStorage {
     return new Promise((resolve, reject) => {
       this.db.serialize(() => {
         this.db.run(
-          `CREATE TABLE IF NOT EXISTS conductor_state (
-            taskId TEXT PRIMARY KEY,
-            messages TEXT NOT NULL,
-            currentTaskId TEXT NOT NULL,
-            currentStatus TEXT NOT NULL,
+          `CREATE TABLE IF NOT EXISTS conversation_states (
+            stateId TEXT PRIMARY KEY,
             conversationId TEXT NOT NULL,
-            parentTaskId TEXT
+            messages TEXT NOT NULL,
+            taskId TEXT NOT NULL,
+            createdAt INTEGER NOT NULL
           )`,
           (err) => {
             if (err) reject(err);
             else resolve();
           }
         );
+
+        // Create index for faster lookups by conversationId
+        this.db.run(
+          `CREATE INDEX IF NOT EXISTS idx_conversation_id 
+           ON conversation_states(conversationId)`,
+          (err) => {
+            if (err) console.error("Failed to create index:", err);
+          }
+        );
+
+        // Create index for faster lookups by taskId
+        this.db.run(
+          `CREATE INDEX IF NOT EXISTS idx_task_id 
+           ON conversation_states(taskId)`,
+          (err) => {
+            if (err) console.error("Failed to create index:", err);
+          }
+        );
       });
     });
   }
 
-  async setState(taskId: string, state: ConductorStateData): Promise<void> {
+  async setConversationState(
+    stateId: string,
+    state: ConversationStateData
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
-        `INSERT OR REPLACE INTO conductor_state (
-          taskId, messages, currentTaskId, currentStatus, conversationId, parentTaskId
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO conversation_states (
+          stateId, conversationId, messages, taskId, createdAt
+        ) VALUES (?, ?, ?, ?, ?)`,
         [
-          taskId,
-          JSON.stringify(state.messages),
-          state.currentTaskId,
-          state.currentStatus,
+          stateId,
           state.conversationId,
-          state.parentTaskId,
+          JSON.stringify(state.messages),
+          state.taskId,
+          state.createdAt,
         ],
         (err) => {
           if (err) reject(err);
@@ -60,62 +78,16 @@ export class SQLiteConductorStorage {
     });
   }
 
-  async getState(taskId: string): Promise<ConductorStateData | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get<ConductorStateRow>(
-        "SELECT * FROM conductor_state WHERE taskId = ?",
-        [taskId],
-        (err, row) => {
-          if (err) reject(err);
-          else if (!row) resolve(null);
-          else {
-            resolve({
-              taskId: row.taskId,
-              messages: JSON.parse(row.messages),
-              currentTaskId: row.currentTaskId,
-              currentStatus:
-                row.currentStatus as ConductorStateData["currentStatus"],
-              conversationId: row.conversationId,
-              parentTaskId: row.parentTaskId,
-            });
-          }
-        }
-      );
-    });
-  }
-
-  async getAllStates(): Promise<ConductorState> {
-    return new Promise((resolve, reject) => {
-      this.db.all<ConductorStateRow>(
-        "SELECT * FROM conductor_state",
-        [],
-        (err, rows) => {
-          if (err) reject(err);
-          else {
-            const state: ConductorState = {};
-            rows.forEach((row) => {
-              state[row.taskId] = {
-                taskId: row.taskId,
-                messages: JSON.parse(row.messages),
-                currentTaskId: row.currentTaskId,
-                currentStatus:
-                  row.currentStatus as ConductorStateData["currentStatus"],
-                conversationId: row.conversationId,
-                parentTaskId: row.parentTaskId,
-              };
-            });
-            resolve(state);
-          }
-        }
-      );
-    });
-  }
-
-  async deleteState(taskId: string): Promise<void> {
+  async updateMessages(
+    stateId: string,
+    messages: ConversationMessage[]
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
-        "DELETE FROM conductor_state WHERE taskId = ?",
-        [taskId],
+        `UPDATE conversation_states 
+         SET messages = ? 
+         WHERE stateId = ?`,
+        [JSON.stringify(messages), stateId],
         (err) => {
           if (err) reject(err);
           else resolve();
@@ -124,27 +96,141 @@ export class SQLiteConductorStorage {
     });
   }
 
-  async findByConversationId(
-    conversationId: string
-  ): Promise<ConductorStateData | null> {
+  async getConversationState(
+    stateId: string
+  ): Promise<ConversationStateData | null> {
     return new Promise((resolve, reject) => {
-      this.db.get<ConductorStateRow>(
-        "SELECT * FROM conductor_state WHERE conversationId = ? AND parentTaskId IS NULL",
-        [conversationId],
+      this.db.get<ConversationStateRow>(
+        "SELECT * FROM conversation_states WHERE stateId = ?",
+        [stateId],
         (err, row) => {
           if (err) reject(err);
           else if (!row) resolve(null);
           else {
             resolve({
-              taskId: row.taskId,
-              messages: JSON.parse(row.messages),
-              currentTaskId: row.currentTaskId,
-              currentStatus:
-                row.currentStatus as ConductorStateData["currentStatus"],
+              stateId: row.stateId,
               conversationId: row.conversationId,
-              parentTaskId: row.parentTaskId,
+              messages: JSON.parse(row.messages),
+              taskId: row.taskId,
+              createdAt: row.createdAt,
             });
           }
+        }
+      );
+    });
+  }
+
+  async findStateByTaskId(
+    taskId: string
+  ): Promise<ConversationStateData | null> {
+    return new Promise((resolve, reject) => {
+      // Get the most recent state for this task ID
+      this.db.get<ConversationStateRow>(
+        "SELECT * FROM conversation_states WHERE taskId = ? ORDER BY createdAt DESC LIMIT 1",
+        [taskId],
+        (err, row) => {
+          if (err) reject(err);
+          else if (!row) resolve(null);
+          else {
+            resolve({
+              stateId: row.stateId,
+              conversationId: row.conversationId,
+              messages: JSON.parse(row.messages),
+              taskId: row.taskId,
+              createdAt: row.createdAt,
+            });
+          }
+        }
+      );
+    });
+  }
+
+  async findStatesByConversationId(
+    conversationId: string
+  ): Promise<ConversationStateData[]> {
+    return new Promise((resolve, reject) => {
+      this.db.all<ConversationStateRow>(
+        "SELECT * FROM conversation_states WHERE conversationId = ?",
+        [conversationId],
+        (err, rows) => {
+          if (err) reject(err);
+          else if (!rows || rows.length === 0) resolve([]);
+          else {
+            const states = rows.map((row) => ({
+              stateId: row.stateId,
+              conversationId: row.conversationId,
+              messages: JSON.parse(row.messages),
+              taskId: row.taskId,
+              createdAt: row.createdAt,
+            }));
+            resolve(states);
+          }
+        }
+      );
+    });
+  }
+
+  async getAllConversationStates(): Promise<
+    Record<string, ConversationStateData>
+  > {
+    return new Promise((resolve, reject) => {
+      this.db.all<ConversationStateRow>(
+        "SELECT * FROM conversation_states",
+        [],
+        (err, rows) => {
+          if (err) reject(err);
+          else {
+            const states: Record<string, ConversationStateData> = {};
+            rows.forEach((row) => {
+              states[row.stateId] = {
+                stateId: row.stateId,
+                conversationId: row.conversationId,
+                messages: JSON.parse(row.messages),
+                taskId: row.taskId,
+                createdAt: row.createdAt,
+              };
+            });
+            resolve(states);
+          }
+        }
+      );
+    });
+  }
+
+  async deleteConversationState(stateId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        "DELETE FROM conversation_states WHERE stateId = ?",
+        [stateId],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  async deleteStatesByConversationId(conversationId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        "DELETE FROM conversation_states WHERE conversationId = ?",
+        [conversationId],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  async deleteStatesByTaskId(taskId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        "DELETE FROM conversation_states WHERE taskId = ?",
+        [taskId],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
         }
       );
     });

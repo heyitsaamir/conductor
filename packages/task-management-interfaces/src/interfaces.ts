@@ -1,4 +1,9 @@
-export type TaskStatus = "Todo" | "InProgress" | "Blocked" | "Done";
+export type TaskStatus =
+  | "Todo"
+  | "InProgress"
+  | "WaitingForUserResponse"
+  | "Error"
+  | "Done";
 
 export interface Agent {
   id: string;
