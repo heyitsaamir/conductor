@@ -22,7 +22,7 @@ type AgentMessage = ExactMessage<SupportedCapability>;
 const SELF_AGENT: Agent = {
   id: "conductor",
   name: "Conductor",
-  webhookAddress: "http://localhost:3000/recv",
+  url: "http://localhost:3000",
 };
 
 export class ConductorAgent extends BaseAgent<SupportedCapability> {
@@ -108,7 +108,7 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
   }
   async didTask(
     message: Extract<AgentMessage, { type: "did" }>,
-    _initiator: MessageInitiator
+    initiator: MessageInitiator
   ) {
     const updatedTask = await this.workflowExecutor.handleSubtaskResult(
       message.taskId,
@@ -144,7 +144,17 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
       }
       case "needs_clarification": {
         const state = await conductorState.getStateByTaskId(message.taskId);
-        if (!state) break;
+        if (!state) {
+          logger.error("No state found for task", {
+            taskId: message.taskId,
+          });
+          break;
+        }
+
+        if (initiator.type === "teams") {
+          logger.error("Teams initiator not supported for needs clarification");
+          break;
+        }
 
         logger.info("Needs clarification", {
           conversationId: state.conversationId,
@@ -184,6 +194,7 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
             {
               type: "teams",
               conversationId: state.conversationId,
+              byAgentId: initiator.id,
             }
           );
         }

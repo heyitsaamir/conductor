@@ -22,5 +22,5 @@ deploy:
       target: ./.env
       envs:
         NODE_ENV: local
-        PORT: 3978
+        PORT: 4000
         TEAMSFX_NOTIFICATION_STORE_FILENAME: ${{TEAMSFX_NOTIFICATION_STORE_FILENAME}}

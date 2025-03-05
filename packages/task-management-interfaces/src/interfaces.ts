@@ -8,7 +8,7 @@ export type TaskStatus =
 export interface Agent {
   id: string;
   name: string;
-  webhookAddress: string;
+  url: string;
 }
 
 export interface Task {

@@ -101,5 +101,6 @@ interface DelegatedInitiator {
 interface TeamsInitiator {
   type: "teams";
   conversationId: string;
+  byAgentId?: string;
 }
 export type MessageInitiator = DelegatedInitiator | TeamsInitiator;

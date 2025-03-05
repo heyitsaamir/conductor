@@ -9,7 +9,7 @@ export const KNOWN_AGENTS = [
   {
     id: "conductor",
     name: "Conductor",
-    webhookAddress: "http://localhost:3000/recv",
+    url: "http://localhost:3000",
   },
 ];
 
@@ -32,7 +32,7 @@ class AgentRuntime implements Runtime {
         throw new Error(`Agent ${recipient.id} not found`);
       }
       logger.info("Sending message to agent", agent);
-      const result = await fetch(agent.webhookAddress, {
+      const result = await fetch(`${agent.url}/recv`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -103,6 +103,7 @@ const app = new App({
 
 app.on("message", async ({ send, activity }) => {
   await send({ type: "typing" });
+  console.log("message", activity);
   await send(`you said "${activity.text}"`);
 });
 
@@ -115,6 +116,20 @@ http.post("/recv", jsonParser, async (req, res) => {
   await runtime.receiveMessage(req.body, {
     id: sender,
     type: "delegate",
+  });
+  res.send("ok");
+});
+
+http.post("/sendAsTeamsMessage", jsonParser, async (req, res) => {
+  logger.info("sendAsTeamsMessage", req.body);
+  const { message, conversationId } = req.body;
+  if (!message) {
+    res.status(400).send("message is required");
+    return;
+  }
+  await app.send(conversationId, {
+    type: "message",
+    text: message,
   });
   res.send("ok");
 });

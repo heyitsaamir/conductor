@@ -4,6 +4,6 @@ export const KNOWN_AGENTS: Agent[] = [
   {
     id: "lead-qualification",
     name: "Lead Qualification",
-    webhookAddress: "http://localhost:4000/recv",
+    url: "http://localhost:4000",
   },
 ];

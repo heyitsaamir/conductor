@@ -25,7 +25,7 @@ const fakeRuntime: Runtime = {
         throw new Error(`Agent ${recipient.id} not found`);
       }
       logger.info("Sending message to agent", agent);
-      const result = await fetch(agent.webhookAddress, {
+      const result = await fetch(`${agent.url}/recv`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -45,25 +45,56 @@ const fakeRuntime: Runtime = {
       if (message.type === "do") {
         throw new Error("Unsupported message type");
       }
+      let textToSend: string | undefined;
       switch (message.status) {
         case "success":
-          await app.send(recipient.conversationId, {
-            type: "message",
-            text: message.result.message,
-          });
+          textToSend = message.result.message;
           break;
         case "error":
-          await app.send(recipient.conversationId, {
-            type: "message",
-            text: message.error.message,
-          });
+          textToSend = message.error.message;
           break;
         case "needs_clarification":
+          textToSend = message.clarification.message;
+          break;
+      }
+      if (textToSend) {
+        if (recipient.byAgentId) {
+          const agent = KNOWN_AGENTS.find(
+            (agent) => agent.id === recipient.byAgentId
+          );
+          if (!agent) {
+            throw new Error(`Agent ${recipient.byAgentId} not found`);
+          }
+          logger.info("Sending message to agent", {
+            agentUrl: agent.url,
+            message: textToSend,
+            conversationId: recipient.conversationId,
+          });
+          const result = await fetch(`${agent.url}/sendAsTeamsMessage`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-sender-id": "conductor",
+            },
+            body: JSON.stringify({
+              message: textToSend,
+              conversationId: recipient.conversationId,
+            }),
+          });
+          if (!result.ok) {
+            logger.error("Failed to send message to agent", {
+              agent: agent.id,
+              message: message,
+              status: result.status,
+              statusText: result.statusText,
+            });
+          }
+        } else {
           await app.send(recipient.conversationId, {
             type: "message",
-            text: message.clarification.message,
+            text: textToSend,
           });
-          break;
+        }
       }
     }
   },
@@ -212,13 +243,13 @@ http.post("/recv", jsonParser, async (req: any, res: any) => {
         params: {
           message: "build a web application",
           conversationId:
-            "a:1-nplMamMMXmQm_VavY4ZWTJMhYuHDLdqKRi0YqzWY9PKphppVFaI7rOrnj54pvKcTRkSH8-K-xNwhEia3sLFl86LmeTaTfnxLAOJKixU6nBTNTgTQKLsa_zPb1Ju3gq3",
+            "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2;messageid=1741185195826",
         },
       },
       {
         type: "teams",
         conversationId:
-          "a:1-nplMamMMXmQm_VavY4ZWTJMhYuHDLdqKRi0YqzWY9PKphppVFaI7rOrnj54pvKcTRkSH8-K-xNwhEia3sLFl86LmeTaTfnxLAOJKixU6nBTNTgTQKLsa_zPb1Ju3gq3",
+          "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2;messageid=1741185195826",
       }
     );
   };
