@@ -5,8 +5,8 @@
   "id": "${{TEAMS_APP_ID}}",
   "packageName": "com.package.name",
   "name": {
-    "short": "conductor-${{APP_NAME_SUFFIX}}",
-    "full": "conductor"
+    "short": "Conductor Agent",
+    "full": "Conductor Agent"
   },
   "developer": {
     "name": "Microsoft",
@@ -27,34 +27,24 @@
   "staticTabs": [
     {
       "entityId": "conversations",
-      "scopes": [
-        "personal"
-      ]
+      "scopes": ["personal"]
     },
     {
       "entityId": "about",
-      "scopes": [
-        "personal"
-      ]
+      "scopes": ["personal"]
     }
   ],
   "bots": [
     {
       "botId": "${{BOT_ID}}",
-      "scopes": [
-        "personal",
-        "team",
-        "groupChat"
-      ],
+      "scopes": ["personal", "team", "groupChat"],
       "isNotificationOnly": false,
       "supportsCalling": false,
       "supportsVideo": false,
       "supportsFiles": false
     }
   ],
-  "validDomains": [
-    "${{BOT_DOMAIN}}"
-  ],
+  "validDomains": ["${{BOT_DOMAIN}}"],
   "webApplicationInfo": {
     "id": "${{BOT_ID}}",
     "resource": "api://botid-${{BOT_ID}}"
