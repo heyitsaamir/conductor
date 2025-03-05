@@ -38,7 +38,6 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     this.workflowExecutor = new WorkflowExecutor(
       this.taskManagementClient,
       this.runtime,
-      KNOWN_AGENTS,
       conductorState
     );
   }
@@ -57,13 +56,10 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     message: Extract<AgentMessage, { type: "do" }>,
     _initiator: MessageInitiator
   ) {
-    // This is a new task
-    // We need to break it down into subtasks
-    // Then we need to pass it along to the workflow executor
     const { parentTask, subTasks } = await this.buildAndSavePlan(
       message.params.message
     );
-    conductorState[parentTask.id] = {
+    await conductorState.setState(parentTask.id, {
       messages: [
         {
           role: "user",
@@ -74,16 +70,16 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
       currentStatus: "todo",
       conversationId: message.params.conversationId,
       parentTaskId: null,
-    };
+    });
 
     for (const subTask of subTasks) {
-      conductorState[subTask.id] = {
+      await conductorState.setState(subTask.id, {
         messages: [],
         currentTaskId: subTask.id,
         currentStatus: "todo",
         conversationId: message.params.conversationId,
         parentTaskId: parentTask.id,
-      };
+      });
     }
     await this.workflowExecutor.continueWorkflow(parentTask.id);
   }
@@ -94,42 +90,43 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
   ) {
     await this.workflowExecutor.handleSubtaskResult(message.taskId, message);
     switch (message.status) {
-      case "success":
-        {
-          conductorState[message.taskId].currentStatus = "completed";
-          conductorState[message.taskId].messages.push({
+      case "success": {
+        await conductorState.updateStatus(message.taskId, "completed");
+        await conductorState.addMessage(message.taskId, {
+          role: "assistant",
+          content: message.result.message ?? "Done!",
+        });
+        const state = await conductorState.getState(message.taskId);
+        if (state?.parentTaskId) {
+          await conductorState.addMessage(state.parentTaskId, {
             role: "assistant",
             content: message.result.message ?? "Done!",
           });
-          const parentStateId = conductorState[message.taskId].parentTaskId;
-          if (parentStateId) {
-            conductorState[parentStateId].messages.push({
-              role: "assistant",
-              content: message.result.message ?? "Done!",
-            });
-            await this.workflowExecutor.continueWorkflow(parentStateId);
-          }
+          await this.workflowExecutor.continueWorkflow(state.parentTaskId);
         }
         break;
-      case "error":
-        {
-          conductorState[message.taskId].currentStatus = "failed";
-          conductorState[message.taskId].messages.push({
+      }
+      case "error": {
+        await conductorState.updateStatus(message.taskId, "failed");
+        await conductorState.addMessage(message.taskId, {
+          role: "assistant",
+          content: message.error.message ?? "There was an error",
+        });
+        const state = await conductorState.getState(message.taskId);
+        if (state?.parentTaskId) {
+          await conductorState.addMessage(state.parentTaskId, {
             role: "assistant",
             content: message.error.message ?? "There was an error",
           });
-          const parentStateId = conductorState[message.taskId].parentTaskId;
-          if (parentStateId) {
-            conductorState[parentStateId].messages.push({
-              role: "assistant",
-              content: message.error.message ?? "There was an error",
-            });
-          }
         }
         break;
-      case "needs_clarification":
+      }
+      case "needs_clarification": {
+        const state = await conductorState.getState(message.taskId);
+        if (!state) break;
+
         logger.info("Needs clarification", {
-          conversationId: conductorState[message.taskId].conversationId,
+          conversationId: state.conversationId,
           message: message.clarification.message,
         });
         // ask conductor to clarify if it can. if it can't, then we need to ask the user
@@ -138,10 +135,10 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
           message.taskId
         );
         if ("answer" in result) {
-          conductorState[message.taskId].messages.push({
+          await conductorState.addMessage(message.taskId, {
             role: "user",
             content: result.answer,
-          }); // No need to add it to the parent state
+          });
           await this.runtime.sendMessage(
             {
               type: "do",
@@ -154,15 +151,20 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
             this.getRecipient(initiator)
           );
         } else {
-          conductorState[message.taskId].currentStatus = "waiting_for_user";
-          const parentStateId = conductorState[message.taskId].parentTaskId;
-          conductorState[message.taskId].messages.push({
+          await conductorState.updateStatus(message.taskId, "waiting_for_user");
+          await conductorState.addMessage(message.taskId, {
             role: "assistant",
             content: result.questionForUser,
           });
-          if (parentStateId) {
-            conductorState[parentStateId].currentStatus = "waiting_for_user";
-            conductorState[parentStateId].messages.push({
+          const parentState = await conductorState.getParentState(
+            message.taskId
+          );
+          if (parentState) {
+            await conductorState.updateStatus(
+              parentState.taskId,
+              "waiting_for_user"
+            );
+            await conductorState.addMessage(parentState.taskId, {
               role: "assistant",
               content: result.questionForUser,
             });
@@ -178,10 +180,12 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
             },
             {
               type: "teams",
-              conversationId: conductorState[message.taskId].conversationId,
+              conversationId: state.conversationId,
             }
           );
         }
+        break;
+      }
     }
   }
 
@@ -196,20 +200,46 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
         questionForUser: string;
       }
   > {
-    const messages = conductorState[taskId].messages;
-    messages.push({
-      role: "user",
-      content: message,
-    });
+    const state = await conductorState.getState(taskId);
+    if (!state) {
+      return { questionForUser: message };
+    }
     // llm.answerClarification(messages);
 
     return {
-      questionForUser: message,
+      questionForUser: `Question: ${message}`,
     };
   }
 
   async addUserMessage(message: string, taskId: string) {
-    await this.workflowExecutor.handleUserMessage(taskId, message);
+    const taskState = await conductorState.getState(taskId);
+    if (!taskState) {
+      logger.error("Task state not found", { taskId });
+      return;
+    }
+
+    if (taskState.parentTaskId) {
+      logger.error("User messages should be handled by the parent task", {
+        taskId,
+      });
+      return;
+    }
+
+    const currentTask = await conductorState.getState(taskState.currentTaskId);
+    if (!currentTask) {
+      logger.error("Current task not found", { taskId });
+      return;
+    }
+    await conductorState.addMessage(taskId, {
+      role: "user",
+      content: message,
+    });
+    await conductorState.addMessage(currentTask.taskId, {
+      role: "user",
+      content: message,
+    });
+
+    await this.workflowExecutor.continueWorkflow(taskId);
   }
 
   async buildAndSavePlan(task: string): Promise<{

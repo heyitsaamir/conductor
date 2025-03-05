@@ -1,18 +1,13 @@
 import { DidRequest, Runtime } from "@repo/agent-contract";
 import { logger } from "@repo/common";
-import {
-  Agent,
-  Task,
-  TaskManagementClient,
-} from "@repo/task-management-interfaces";
-import { ConductorState } from "./conductorState";
+import { Task, TaskManagementClient } from "@repo/task-management-interfaces";
+import { ConductorStateManager } from "./conductorState";
 
 export class WorkflowExecutor {
   constructor(
     private taskManagementClient: TaskManagementClient,
     private runtime: Runtime,
-    private knownAgents: Agent[],
-    private conductorState: ConductorState
+    private conductorState: ConductorStateManager
   ) {}
 
   async continueWorkflow(
@@ -35,7 +30,7 @@ export class WorkflowExecutor {
 
     if (this.isTaskTerminal(task)) {
       logger.info("Task is terminal, skipping", { task });
-      this.conductorState[task.id].currentStatus = "completed";
+      await this.conductorState.updateStatus(task.id, "completed");
       return "completed";
     }
 
@@ -45,7 +40,7 @@ export class WorkflowExecutor {
         taskId: task.id,
       });
       await this.taskManagementClient.updateTaskStatus(task.id, "Done");
-      this.conductorState[task.id].currentStatus = "completed";
+      await this.conductorState.updateStatus(task.id, "completed");
       // TODO: inform user that the task was done
       return "completed";
     }
@@ -55,7 +50,7 @@ export class WorkflowExecutor {
   }
 
   async continueSubtask(task: Task) {
-    await this.prepareSubtaskForExecution(task, task);
+    await this.prepareSubtaskForExecution(task);
     await this.executeTask(task);
   }
 
@@ -68,28 +63,11 @@ export class WorkflowExecutor {
     switch (message.status) {
       case "success":
         await this.taskManagementClient.updateTaskStatus(taskId, "Done");
-        this.conductorState[taskId].currentStatus = "completed";
-        // Update the task messages and the parent task messages
-        this.conductorState[taskId].messages.push({
-          role: "assistant",
-          content: message.result.message ?? "Done!",
-        });
-        if (parentTask) {
-          this.conductorState[parentTask.id].messages.push({
-            role: "assistant",
-            content: message.result.message ?? "Done!",
-          });
-        }
         break;
       case "error":
         await this.taskManagementClient.updateTaskStatus(taskId, "Blocked");
-        this.conductorState[taskId].currentStatus = "failed";
-        this.conductorState[taskId].messages.push({
-          role: "assistant",
-          content: message.error.message ?? "There was an error",
-        });
         if (parentTask) {
-          this.conductorState[parentTask.id].messages.push({
+          await this.conductorState.addMessage(parentTask.id, {
             role: "assistant",
             content: message.error.message ?? "There was an error",
           });
@@ -101,39 +79,35 @@ export class WorkflowExecutor {
           taskId,
           message.clarification.message ?? "Needs clarification"
         );
-        console.log("// TODO: Send a message to the user to clarify something");
         break;
     }
   }
 
-  private async prepareSubtaskForExecution(task: Task, parentTask: Task) {
-    const taskState = this.conductorState[task.id];
+  private async prepareSubtaskForExecution(task: Task) {
+    const taskState = await this.conductorState.getState(task.id);
+    if (!taskState) return;
+
     const isFirstMessage = taskState.messages.length === 0;
-    const agent = this.knownAgents.find(
-      (agent) => agent.id === task.assignedTo
-    );
-    if (!agent) {
-      throw new Error(`Agent ${parentTask.assignedTo} not found`);
-    }
     if (isFirstMessage) {
       const firstMessage: string = task.description; // TODO: Ask the llm to build the first message based on previous messages
-      const parentState = taskState.parentTaskId
-        ? this.conductorState[taskState.parentTaskId]
-        : null;
+      const parentState = await this.conductorState.getParentState(task.id);
       if (parentState) {
-        parentState.messages.push({
+        await this.conductorState.addMessage(parentState.taskId, {
           role: "user",
           content: firstMessage,
         });
-        parentState.currentTaskId = task.id;
+        await this.conductorState.setState(parentState.taskId, {
+          ...parentState,
+          currentTaskId: task.id,
+        });
       }
-      taskState.messages.push({
+      await this.conductorState.addMessage(task.id, {
         role: "user",
         content: firstMessage,
       });
-      await this.taskManagementClient.updateTaskStatus(task.id, "InProgress");
-      this.conductorState[task.id].currentStatus = "in-progress";
     }
+    await this.taskManagementClient.updateTaskStatus(task.id, "InProgress");
+    await this.conductorState.updateStatus(task.id, "in-progress");
   }
 
   private async executeTask(task: Task) {
@@ -141,7 +115,10 @@ export class WorkflowExecutor {
       throw new Error("Task assignedTo is undefined");
     }
     logger.info("Executing task", { task });
-    const taskState = this.conductorState[task.id];
+    const taskState = await this.conductorState.getState(task.id);
+    if (!taskState) {
+      throw new Error("Task state not found");
+    }
     const lastMessage = taskState.messages.at(-1);
     if (!lastMessage) {
       throw new Error("No last message found");
@@ -162,28 +139,6 @@ export class WorkflowExecutor {
       }
     );
     return response;
-  }
-
-  async handleUserMessage(taskId: string, message: string) {
-    const taskState = this.conductorState[taskId];
-    const parentTask = taskState.parentTaskId
-      ? this.conductorState[taskState.parentTaskId]
-      : null;
-    taskState.messages.push({
-      role: "user",
-      content: message,
-    });
-    if (parentTask) {
-      parentTask.messages.push({
-        role: "user",
-        content: message,
-      });
-    }
-
-    if (parentTask) {
-      const task = await this.taskManagementClient.getTask(taskId);
-      await this.continueSubtask(task);
-    }
   }
 
   private isTaskTerminal(task: Task): boolean {

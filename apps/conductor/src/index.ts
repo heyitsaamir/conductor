@@ -84,13 +84,13 @@ conductorAgent = new ConductorAgent(fakeRuntime);
 http.use(cors());
 
 app.on("message", async ({ activity }) => {
-  const stateForConversation = Object.values(conductorState).find(
-    (state) => state.conversationId === activity.conversation.id
+  const stateForConversation = await conductorState.findStateByConversationId(
+    activity.conversation.id
   );
   if (stateForConversation) {
     await conductorAgent.addUserMessage(
       activity.text,
-      stateForConversation.currentTaskId
+      stateForConversation.taskId
     );
   }
 });
