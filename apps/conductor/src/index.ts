@@ -5,8 +5,8 @@ import { Message, MessageInitiator, Runtime } from "@repo/agent-contract";
 import { logger } from "@repo/common";
 import bodyParser from "body-parser";
 import cors from "cors";
+import { defaultAgentStore } from "./agentStore";
 import { ConductorAgent } from "./conductorAgent";
-import { KNOWN_AGENTS } from "./constants";
 
 const http = new HttpPlugin();
 const jsonParser = bodyParser.json();
@@ -20,7 +20,7 @@ let conductorAgent: ConductorAgent;
 const fakeRuntime: Runtime = {
   sendMessage: async (message: Message, recipient: MessageInitiator) => {
     if (recipient.type === "delegate") {
-      const agent = KNOWN_AGENTS.find((agent) => agent.id === recipient.id);
+      const agent = defaultAgentStore.getById(recipient.id);
       if (!agent) {
         throw new Error(`Agent ${recipient.id} not found`);
       }
@@ -59,9 +59,7 @@ const fakeRuntime: Runtime = {
       }
       if (textToSend) {
         if (recipient.byAgentId) {
-          const agent = KNOWN_AGENTS.find(
-            (agent) => agent.id === recipient.byAgentId
-          );
+          const agent = defaultAgentStore.getById(recipient.byAgentId);
           if (!agent) {
             throw new Error(`Agent ${recipient.byAgentId} not found`);
           }

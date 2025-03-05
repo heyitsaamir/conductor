@@ -1,13 +1,14 @@
 import { DidRequest, Runtime } from "@repo/agent-contract";
 import { logger } from "@repo/common";
 import { Task, TaskManagementClient } from "@repo/task-management-interfaces";
+import { AgentStore } from "./agentStore";
 import { ConductorStateManager } from "./conductorState";
-
 export class WorkflowExecutor {
   constructor(
     private taskManagementClient: TaskManagementClient,
     private runtime: Runtime,
-    private conductorState: ConductorStateManager
+    private conductorState: ConductorStateManager,
+    private agentStore: AgentStore
   ) {}
 
   async continueWorkflow(
@@ -119,14 +120,18 @@ export class WorkflowExecutor {
       throw new Error("Task state not found");
     }
     if (taskState.messages.length === 1) {
-      // Send it to Teams
+      // Send it to Teams to show that we're telling an agent to do work
+      const agent = this.agentStore.getById(task.assignedTo);
+      if (!agent) {
+        throw new Error("Agent not found");
+      }
       await this.runtime.sendMessage(
         {
           type: "did",
           status: "success",
           taskId: task.id,
           result: {
-            message: `${taskState.messages[0].content}`,
+            message: `**@${agent.name}** - ${taskState.messages[0].content}`,
           },
         },
         {

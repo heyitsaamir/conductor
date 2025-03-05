@@ -1,4 +1,5 @@
 import { Agent } from "@repo/task-management-interfaces";
+import { AgentStore } from "./agentStore";
 
 interface TaskPlan {
   title: string;
@@ -8,11 +9,7 @@ interface TaskPlan {
 }
 
 export class Planner {
-  private agents: Agent[];
-
-  constructor(agents: Agent[]) {
-    this.agents = agents;
-  }
+  constructor(private agentStore: AgentStore) {}
 
   public plan(taskTitle: string): TaskPlan {
     let subTasks: TaskPlan[] = [];
@@ -30,19 +27,29 @@ export class Planner {
         break;
     }
 
+    const defaultAgent = this.agentStore.getAll()[0];
+    if (!defaultAgent) {
+      throw new Error("No agents available for task execution");
+    }
+
     return {
       title: taskTitle,
       description: `Plan for: ${taskTitle}`,
-      executor: this.agents[0],
+      executor: defaultAgent,
       subTasks,
     };
   }
 
   private createSingleTask(title: string): TaskPlan {
+    const defaultAgent = this.agentStore.getAll()[0];
+    if (!defaultAgent) {
+      throw new Error("No agents available for task execution");
+    }
+
     return {
       title,
       description: `Execute task: ${title}`,
-      executor: this.agents[0],
+      executor: defaultAgent,
       subTasks: [],
     };
   }

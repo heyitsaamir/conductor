@@ -10,9 +10,9 @@ import {
   Task,
   TaskManagementClient,
 } from "@repo/task-management-interfaces";
+import { defaultAgentStore } from "./agentStore";
 import { conductor } from "./conductorCapability";
 import { conductorState } from "./conductorState";
-import { KNOWN_AGENTS } from "./constants";
 import { Planner } from "./planner";
 import { WorkflowExecutor } from "./workflowExecutor";
 type SupportedCapability = typeof conductor;
@@ -32,14 +32,15 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
   private workflowExecutor: WorkflowExecutor;
   constructor(runtime: Runtime) {
     super(runtime, [conductor]);
-    this.planner = new Planner(KNOWN_AGENTS);
+    this.planner = new Planner(defaultAgentStore);
     this.taskManagementClient = new TaskManagementClient(
       "http://localhost:3002"
     );
     this.workflowExecutor = new WorkflowExecutor(
       this.taskManagementClient,
       this.runtime,
-      conductorState
+      conductorState,
+      defaultAgentStore
     );
   }
 
