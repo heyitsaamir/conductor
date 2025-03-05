@@ -19,13 +19,14 @@
     "dev:teamsfx:launch-testtool": "npx env-cmd --silent -f env/.env.testtool teamsapptester start"
   },
   "dependencies": {
-    "@repo/common": "^1.0.0",
     "@microsoft/spark.api": "latest",
     "@microsoft/spark.apps": "latest",
     "@microsoft/spark.cards": "latest",
     "@microsoft/spark.common": "latest",
     "@microsoft/spark.dev": "latest",
     "@microsoft/spark.graph": "latest",
+    "@repo/common": "^1.0.0",
+    "@repo/simple-agent-runtime": "^1.0.0",
     "body-parser": "^1.20.3"
   },
   "devDependencies": {

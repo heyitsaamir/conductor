@@ -10,6 +10,8 @@ import { Capability } from "./capability";
 import Runtime from "./runtime";
 
 abstract class BaseAgent<T extends Capability<any, any>> implements Agent<T> {
+  abstract readonly id: string;
+
   constructor(
     protected readonly runtime: Runtime,
     protected readonly capabilities: T[]
@@ -37,14 +39,20 @@ abstract class BaseAgent<T extends Capability<any, any>> implements Agent<T> {
       (capability) => ExactMessageSchema(capability).safeParse(message).success
     );
 
-    logger.debug(`Message validation ${isValid ? "succeeded" : "failed"}`, {
-      class: this.constructor.name,
-      method: "validateMessage",
-      messageType: message.type,
-      capability: "method" in message ? message.method : undefined,
-      taskId: message.taskId,
-      capabilities: this.capabilities.map((c) => c.name),
-    });
+    if (!isValid) {
+      logger.error("Invalid message", {
+        class: this.constructor.name,
+        method: "validateMessage",
+        messageType: message.type,
+        capability: "method" in message ? message.method : undefined,
+        taskId: message.taskId,
+        capabilities: this.capabilities.map((c) => c.name),
+      });
+
+      this.capabilities.some((capability) =>
+        ExactMessageSchema(capability).parse(message)
+      );
+    }
 
     return isValid;
   }

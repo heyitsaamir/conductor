@@ -26,6 +26,7 @@ const SELF_AGENT: Agent = {
 };
 
 export class ConductorAgent extends BaseAgent<SupportedCapability> {
+  readonly id = "conductor";
   private planner: Planner;
   private taskManagementClient: TaskManagementClient;
   private workflowExecutor: WorkflowExecutor;
@@ -49,6 +50,10 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
           message.params.conversationId
         );
         if (existingTasks.length > 0) {
+          logger.info("Existing tasks found for conversation", {
+            conversationId: message.params.conversationId,
+            tasks: existingTasks,
+          });
           const tasks = await this.taskManagementClient.listTasks({
             ids: existingTasks.map((task) => task.taskId),
             status: "WaitingForUserResponse",

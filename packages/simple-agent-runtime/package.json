@@ -1,5 +1,5 @@
 {
-  "name": "template-package",
+  "name": "@repo/simple-agent-runtime",
   "version": "1.0.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,8 +9,12 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "Use this app as a template for your new package",
-  "dependencies": {},
+  "description": "A simple agent runtime",
+  "dependencies": {
+    "@repo/agent-contract": "^1.0.0",
+    "@repo/common": "^1.0.0",
+    "zod": "^3.24.2"
+  },
   "devDependencies": {
     "typescript": "^5.0.0"
   }
