@@ -25,6 +25,12 @@ const taskPlanSchema = baseTaskPlanSchema.extend({
 
 type TaskPlan = z.infer<typeof taskPlanSchema>;
 
+const WORKFLOW_GUIDANCE = `
+When a new request comes in, the workflow is generally:
+1. Get lead information based on company details
+2. Schedule a meeting with the lead.
+`;
+
 export class Planner {
   private openai: AzureOpenAIProvider;
   constructor(private agentStore: AgentStore) {
@@ -53,11 +59,16 @@ export class Planner {
       .join("\n");
 
     const systemPrompt = `You are a task planner that breaks down tasks into sequential subtasks.
-Given the task description and available agents, create a plan with appropriate subtasks.
+Given the task description, workflow guidance, and available agents, create a plan with appropriate subtasks.
 Each subtask should be assigned to the most suitable agent.
 
-Available agents:
-${agentDescriptions}`;
+<AVAILABLE_AGENTS>
+${agentDescriptions}
+
+<WORKFLOW_GUIDANCE>
+${WORKFLOW_GUIDANCE}
+</WORKFLOW_GUIDANCE>
+`;
 
     const messages: CoreMessage[] = [
       { role: "system", content: systemPrompt },

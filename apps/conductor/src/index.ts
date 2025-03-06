@@ -273,7 +273,7 @@ http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
 }
  */
 http.post("/channelMessage", jsonParser, async (req: any, res: any) => {
-  logger.info("Receive channel message");
+  logger.info("Receive channel message", req.body);
   const {
     replyToId: parentMessageId,
     body: { plainTextContent },

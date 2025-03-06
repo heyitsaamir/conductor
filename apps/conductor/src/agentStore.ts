@@ -8,45 +8,20 @@ type AgentWithMembership = Agent & {
 const KNOWN_AGENTS: AgentWithMembership[] = [
   {
     id: "lead-qualification",
-    name: "Design Agent",
-    description: "A design agent that designs UI/UX mockups",
+    name: "Lead Qualification Agent",
+    description:
+      "A lead qualification agent that qualifies leads and assses new leads.",
     url: "http://localhost:4000",
     channelMembership: [
       "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2",
     ],
   },
   {
-    id: "lead-qualification",
-    name: "Project Structure Agent",
-    description: "Can set up project structure for a webapp",
-    url: "http://localhost:4000",
-    channelMembership: [
-      "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2",
-    ],
-  },
-  {
-    id: "lead-qualification",
-    name: "Frontend Agent",
-    description: "Can implement frontend components for a webapp",
-    url: "http://localhost:4000",
-    channelMembership: [
-      "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2",
-    ],
-  },
-  {
-    id: "lead-qualification",
-    name: "Backend Agent",
-    description: "Can implement backend API for a webapp",
-    url: "http://localhost:4000",
-    channelMembership: [
-      "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2",
-    ],
-  },
-  {
-    id: "lead-qualification",
-    name: "Testing Agent",
-    description: "Can write tests for a webapp",
-    url: "http://localhost:4000",
+    id: "meeting-coordinator",
+    name: "Meeting Coordinator Agent",
+    description:
+      "A meeting coordinator agent that coordinates meetings between leads and sales reps and schedulees the meeting",
+    url: "http://localhost:4001",
     channelMembership: [
       "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2",
     ],
