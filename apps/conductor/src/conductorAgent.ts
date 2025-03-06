@@ -1,3 +1,4 @@
+import { createAzure } from "@ai-sdk/azure";
 import {
   BaseAgent,
   ExactMessage,
@@ -10,6 +11,7 @@ import {
   Task,
   TaskManagementClient,
 } from "@repo/task-management-interfaces";
+import { CoreMessage, generateText } from "ai";
 import { defaultAgentStore } from "./agentStore";
 import { conductor } from "./conductorCapability";
 import { conductorState } from "./conductorState";
@@ -323,15 +325,92 @@ ${subTasksMessage}
         questionForUser: string;
       }
   > {
-    const state = await conductorState.getConversationStates(taskId);
-    if (!state) {
-      return { questionForUser: message };
+    const task = await this.taskManagementClient.getTask(taskId);
+    if (!task) {
+      throw new Error("Task not found");
     }
-    // llm.answerClarification(messages);
 
-    return {
-      questionForUser: `Question: ${message}`,
-    };
+    if (!task.parentId) {
+      throw new Error("Task has no parent");
+    }
+
+    const stateForParentTask = await conductorState.getStateByTaskId(
+      task.parentId
+    );
+    if (!stateForParentTask) {
+      throw new Error("State for parent task not found");
+    }
+
+    // Get all messages from the conversation states
+    const allMessages: CoreMessage[] = [];
+
+    // Add system message to provide context
+    allMessages.push({
+      role: "system",
+      content: `You are an AI assistant helping with a task. Answer the user's question based on the conversation history provided. Follow these rules:
+<RULES>
+1. You must only answer the question based on the conversation history provided.
+2. If you can answer the question based on the conversation history, start your response with "ANSWER:"
+3. If you cannot answer the question based on the conversation history, you must ask a follow-up question to the user. Start your response with "QUESTION FOR USER:"
+</RULES>
+`,
+    });
+
+    // Add all messages from the conversation states
+    let messagesStr = "";
+    for (const msg of stateForParentTask.messages) {
+      messagesStr += `${msg.role}: ${msg.content}\n`;
+    }
+
+    // Add the current question
+    allMessages.push({
+      role: "user",
+      content: `<CONVERSATION HISTORY>
+${messagesStr}
+</CONVERSATION HISTORY>
+
+<QUESTION>
+${message}
+</QUESTION>
+`,
+    });
+
+    try {
+      // Create OpenAI provider similar to how it's done in Planner
+      const openai = createAzure({
+        apiKey: process.env.AZURE_OPENAI_API_KEY,
+        baseURL: process.env.AZURE_OPENAI_ENDPOINT,
+        apiVersion: "2024-10-21",
+      });
+
+      // Generate the response
+      const { text } = await generateText({
+        model: openai("gpt-4o"),
+        messages: allMessages,
+      });
+
+      if (text.includes("ANSWER:")) {
+        return { answer: text.replace("ANSWER:", "").trim() };
+      } else if (text.includes("QUESTION FOR USER:")) {
+        return {
+          questionForUser: text.replace("QUESTION FOR USER:", "").trim(),
+        };
+      } else {
+        logger.error("Unexpected response from AI", {
+          text,
+          taskId,
+          message,
+        });
+        return {
+          answer: `I couldn't process your question. Could you please rephrase or provide more details? Original question: ${message}`,
+        };
+      }
+    } catch (error) {
+      logger.error("Error answering clarification", { error, taskId, message });
+      return {
+        questionForUser: `I couldn't process your question. Could you please rephrase or provide more details? Original question: ${message}`,
+      };
+    }
   }
 
   async addUserMessage(message: string, blockedTask: Task) {
