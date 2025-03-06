@@ -32,12 +32,19 @@
     {
       "entityId": "about",
       "scopes": ["personal"]
+    },
+    {
+      "name": "Tasks",
+      "entityId": "tasks",
+      "scopes": ["team"],
+      "contentUrl": "https://98v29k49-5173.usw2.devtunnels.ms/tasks",
+      "websiteUrl": "https://98v29k49-5173.usw2.devtunnels.ms/tasks"
     }
   ],
   "bots": [
     {
       "botId": "${{BOT_ID}}",
-      "scopes": ["personal", "team", "groupChat"],
+      "scopes": ["team"],
       "isNotificationOnly": false,
       "supportsCalling": false,
       "supportsVideo": false,

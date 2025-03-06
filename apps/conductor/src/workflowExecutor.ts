@@ -47,6 +47,10 @@ export class WorkflowExecutor {
       return "completed";
     }
 
+    // Set the task as in progress
+    if (task.status !== "InProgress") {
+      await this.taskManagementClient.updateTaskStatus(task.id, "InProgress");
+    }
     await this.continueSubtask(nextTask);
     return "in-progress";
   }
