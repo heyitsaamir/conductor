@@ -39,6 +39,12 @@ export class AgentRuntime implements Runtime {
           statusText: result.statusText,
         });
       }
+      logger.info("Message sent to agent", {
+        agent: agent.id,
+        message: message,
+        status: result.status,
+        statusText: result.statusText,
+      });
     } else {
       throw new Error("Unsupported recipient type");
     }

@@ -1,4 +1,4 @@
-import { MessageSendActivity } from "@microsoft/spark.api";
+import { MentionEntity, MessageSendActivity } from "@microsoft/spark.api";
 import { App, HttpPlugin } from "@microsoft/spark.apps";
 import { DevtoolsPlugin } from "@microsoft/spark.dev";
 import { Message, MessageInitiator, Runtime } from "@repo/agent-contract";
@@ -279,11 +279,13 @@ http.post("/channelMessage", jsonParser, async (req: any, res: any) => {
     body: { plainTextContent },
     channelId,
     from: { user },
+    mentions,
   }: {
     replyToId: string;
     body: { content: string; plainTextContent: string };
     channelId: string;
     from: { user: { id: string } };
+    mentions: MentionEntity[];
   } = req.body;
   if (user == null) {
     logger.info("Ignore message from bot");
@@ -291,6 +293,17 @@ http.post("/channelMessage", jsonParser, async (req: any, res: any) => {
     res.status(200).send("ok");
     return;
   }
+
+  if (mentions.length > 0) {
+    logger.warn("Ignoring message with mentions", {
+      mentions,
+      channelId,
+      parentMessageId,
+    });
+    res.status(200).send("ok");
+    return;
+  }
+
   const conversationId = `${channelId};messageid=${parentMessageId}`;
   const activityText = prepareActivityText(plainTextContent);
   await receiveMessageFromTeams(activityText, conversationId);
@@ -304,6 +317,10 @@ http.post("/recv", jsonParser, async (req: any, res: any) => {
     return;
   }
   res.status(200).send("ok");
+  logger.info("Receive message from agent", {
+    sender,
+    message: req.body,
+  });
   await fakeRuntime.receiveMessage(req.body, {
     id: sender,
     type: "delegate",
@@ -311,6 +328,5 @@ http.post("/recv", jsonParser, async (req: any, res: any) => {
 });
 
 (async () => {
-  // Pause for 2 seconds, then send a message to the lead qualification agent
   await app.start(+(process.env.PORT || 3000));
 })();

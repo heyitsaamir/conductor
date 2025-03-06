@@ -355,7 +355,7 @@ ${subTasksMessage}
     subTasks: Task[];
   }> {
     // Use planner to break down the task
-    const taskPlan = this.planner.plan(task);
+    const taskPlan = await this.planner.plan(task);
     // Save the parent task
     const savedParentTask = await this.taskManagementClient.createTask({
       title: taskPlan.title,
@@ -372,7 +372,7 @@ ${subTasksMessage}
         description: task.description,
         createdBy: SELF_AGENT.id,
         parentId: savedParentTask.id,
-        assignedTo: task.executor.id,
+        assignedTo: task.agentId,
       });
       savedSubTasks.push(response);
     }

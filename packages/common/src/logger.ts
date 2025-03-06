@@ -40,6 +40,7 @@ const consoleTransport = new winston.transports.Console({
   format: winston.format.combine(
     winston.format.colorize({ all: true }),
     winston.format.padLevels(),
+    winston.format.errors({ stack: true }),
     consoleFormat({
       showMeta: true,
       metaStrip: ["timestamp", "service"],
