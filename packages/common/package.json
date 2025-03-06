@@ -2,7 +2,8 @@
   "name": "@repo/common",
   "version": "1.0.0",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "example": "ts-node src/example.ts"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,8 +12,7 @@
   "license": "ISC",
   "description": "Common utilities for the repo",
   "dependencies": {
-    "winston": "^3.17.0",
-    "winston-console-format": "^1.0.8"
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
