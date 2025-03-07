@@ -1,4 +1,5 @@
 import { AzureOpenAIProvider, createAzure } from "@ai-sdk/azure";
+import { ActivityLike } from "@microsoft/spark.api";
 import {
   BaseAgent,
   ExactMessage,
@@ -104,44 +105,76 @@ export class AgentHandler extends BaseAgent<typeof HandleMessageCapability> {
           this.getRecipient(initiator)
         );
       } else if (aiResponse.meetingDetails) {
-        const markdownLines = [];
-        markdownLines.push(
-          `### Meeting Scheduled: ${aiResponse.meetingDetails.companyName}`
-        );
-        markdownLines.push(
-          `Meeting between **${aiResponse.meetingDetails.salesRepName}** (${aiResponse.meetingDetails.salesRepTitle}) and **${aiResponse.meetingDetails.clientName}** from ${aiResponse.meetingDetails.companyName}`
-        );
-        markdownLines.push(
-          `- **Date**: ${aiResponse.meetingDetails.meetingDate}`
-        );
-        markdownLines.push(
-          `- **Time**: ${aiResponse.meetingDetails.meetingTime}`
-        );
-        markdownLines.push(
-          `- **Duration**: ${aiResponse.meetingDetails.meetingDuration}`
-        );
-        markdownLines.push(
-          `- **Meeting URL**: ${aiResponse.meetingDetails.meetingUrl}`
-        );
+        const activity: ActivityLike = {
+          type: "message",
+          attachments: [
+            {
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: {
+                type: "AdaptiveCard",
+                $schema: "https://adaptivecards.io/schemas/adaptive-card.json",
+                version: "1.5",
+                body: [
+                  {
+                    type: "TextBlock",
+                    text: `Meeting Scheduled: ${aiResponse.meetingDetails.companyName}`,
+                    size: "Large",
+                    weight: "Bolder",
+                    wrap: true,
+                  },
+                  {
+                    type: "TextBlock",
+                    text: `Meeting between ${aiResponse.meetingDetails.salesRepName} (${aiResponse.meetingDetails.salesRepTitle}) and ${aiResponse.meetingDetails.clientName}`,
+                    wrap: true,
+                    spacing: "Medium",
+                  },
+                  {
+                    type: "FactSet",
+                    facts: [
+                      {
+                        title: "Date",
+                        value: aiResponse.meetingDetails.meetingDate,
+                      },
+                      {
+                        title: "Time",
+                        value: aiResponse.meetingDetails.meetingTime,
+                      },
+                      {
+                        title: "Duration",
+                        value: aiResponse.meetingDetails.meetingDuration,
+                      },
+                      {
+                        title: "Meeting URL",
+                        value: aiResponse.meetingDetails.meetingUrl,
+                      },
+                      ...(aiResponse.meetingDetails.additionalNotes
+                        ? [
+                            {
+                              title: "Additional Notes",
+                              value: aiResponse.meetingDetails.additionalNotes,
+                            },
+                          ]
+                        : []),
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        };
 
-        if (aiResponse.meetingDetails.additionalNotes) {
-          markdownLines.push(
-            `\n**Additional Notes**: ${aiResponse.meetingDetails.additionalNotes}`
-          );
-        }
-
-        const markdownMessage = markdownLines.join("\n");
         messages.push({
           role: "assistant",
-          content: markdownMessage,
+          content: JSON.stringify(activity),
         });
+
         await this.runtime.sendMessage(
           {
             type: "did",
             status: "success",
             taskId: message.taskId,
             result: {
-              message: markdownMessage,
+              message: JSON.stringify(activity),
             },
           },
           this.getRecipient(initiator)

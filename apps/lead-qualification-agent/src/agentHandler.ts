@@ -1,4 +1,5 @@
 import { AzureOpenAIProvider, createAzure } from "@ai-sdk/azure";
+import { ActivityLike } from "@microsoft/spark.api";
 import {
   BaseAgent,
   ExactMessage,
@@ -100,37 +101,78 @@ export class AgentHandler extends BaseAgent<typeof HandleMessageCapability> {
           this.getRecipient(initiator)
         );
       } else if (aiResponse.assessment) {
-        const markdownLines = [];
-        markdownLines.push(
-          `### Assessment for ${aiResponse.assessment.companyName}`
-        );
-        markdownLines.push(
-          `- Company Description: ${aiResponse.assessment.companyDescription}`
-        );
-        markdownLines.push(
-          `- Company Size: ${aiResponse.assessment.companySize}`
-        );
-        markdownLines.push(
-          `- Company Industry: ${aiResponse.assessment.companyIndustry}`
-        );
-        markdownLines.push(
-          `- Company Main Product: ${aiResponse.assessment.companyMainProduct}`
-        );
-        markdownLines.push(
-          `- Company Revenue: ${aiResponse.assessment.companyRevenue}`
-        );
-        const markdownMessage = markdownLines.join("\n");
+        const activity: ActivityLike = {
+          type: "message",
+          attachments: [
+            {
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: {
+                type: "AdaptiveCard",
+                $schema: "https://adaptivecards.io/schemas/adaptive-card.json",
+                version: "1.5",
+                body: [
+                  {
+                    type: "TextBlock",
+                    text: `Assessment for ${aiResponse.assessment.companyName}`,
+                    size: "Large",
+                    weight: "Bolder",
+                    wrap: true,
+                  },
+                  {
+                    type: "FactSet",
+                    facts: [
+                      {
+                        title: "Description",
+                        value: aiResponse.assessment.companyDescription,
+                      },
+                      {
+                        title: "Size",
+                        value: aiResponse.assessment.companySize.toString(),
+                      },
+                      {
+                        title: "Industry",
+                        value: aiResponse.assessment.companyIndustry,
+                      },
+                      {
+                        title: "Main Product",
+                        value: aiResponse.assessment.companyMainProduct,
+                      },
+                      {
+                        title: "Revenue",
+                        value: `$${aiResponse.assessment.companyRevenue.toLocaleString()}`,
+                      },
+                      {
+                        title: "Founded",
+                        value: aiResponse.assessment.companyFounded.toString(),
+                      },
+                      {
+                        title: "Location",
+                        value: aiResponse.assessment.companyLocation,
+                      },
+                      {
+                        title: "CEO",
+                        value: aiResponse.assessment.companyCEO,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        };
+
         messages.push({
           role: "assistant",
-          content: markdownMessage,
+          content: JSON.stringify(activity),
         });
+
         await this.runtime.sendMessage(
           {
             type: "did",
             status: "success",
             taskId: message.taskId,
             result: {
-              message: markdownMessage,
+              message: JSON.stringify(activity),
             },
           },
           this.getRecipient(initiator)
