@@ -40,7 +40,30 @@ export class TaskManagementClient {
       throw new Error(error.error || `HTTP error! status: ${response.status}`);
     }
 
-    return response.json();
+    const data = await response.json();
+
+    // Transform date strings to Date objects for Task responses
+    if (this.isTask(data)) {
+      return this.transformDates(data) as T;
+    } else if (Array.isArray(data) && data.length > 0 && this.isTask(data[0])) {
+      return data.map((task) => this.transformDates(task)) as T;
+    }
+
+    return data;
+  }
+
+  private isTask(obj: any): obj is Task {
+    return (
+      obj && typeof obj === "object" && "createdAt" in obj && "updatedAt" in obj
+    );
+  }
+
+  private transformDates(task: any): Task {
+    return {
+      ...task,
+      createdAt: new Date(task.createdAt),
+      updatedAt: new Date(task.updatedAt),
+    };
   }
 
   async createTask(taskInput: CreateTaskInput): Promise<Task> {
