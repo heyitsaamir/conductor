@@ -156,7 +156,13 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
 
     let subTasksMessage = "";
     for (let i = 0; i < subTasks.length; i++) {
-      subTasksMessage += ` ${i + 1}. ${subTasks[i].description}\n`;
+      let agentName = "";
+      const subtask = subTasks[i];
+      if (subtask.assignedTo) {
+        const agent = await defaultAgentStore.getById(subtask.assignedTo);
+        agentName = agent?.name ?? "";
+      }
+      subTasksMessage += ` ${i + 1}. ${subtask.description} (_@${agentName}_)\n`;
     }
 
     const planMessage = `I have created a plan for you:

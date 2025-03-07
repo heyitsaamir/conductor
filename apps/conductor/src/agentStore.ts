@@ -8,7 +8,7 @@ type AgentWithMembership = Agent & {
 const KNOWN_AGENTS: AgentWithMembership[] = [
   {
     id: "lead-qualification",
-    name: "Lead Qualification Agent",
+    name: "LeadQualificationAgent",
     description:
       "A lead qualification agent that qualifies leads and assses new leads.",
     url: "http://localhost:4000",
@@ -18,7 +18,7 @@ const KNOWN_AGENTS: AgentWithMembership[] = [
   },
   {
     id: "meeting-coordinator",
-    name: "Meeting Coordinator Agent",
+    name: "MeetingCoordinatorAgent",
     description:
       "A meeting coordinator agent that coordinates meetings between leads and sales reps and schedulees the meeting",
     url: "http://localhost:4001",
