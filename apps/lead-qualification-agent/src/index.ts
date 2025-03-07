@@ -1,3 +1,4 @@
+import { ActivityLike } from "@microsoft/spark.api";
 import { App, HttpPlugin } from "@microsoft/spark.apps";
 import { logger } from "@repo/common";
 import { AgentRuntime } from "@repo/simple-agent-runtime";
@@ -41,10 +42,16 @@ http.post("/sendAsTeamsMessage", jsonParser, async (req, res) => {
     res.status(400).send("message is required");
     return;
   }
-  await app.send(conversationId, {
-    type: "message",
-    text: message,
-  });
+  let activity: ActivityLike;
+  if (message.startsWith("{") && message.endsWith("}")) {
+    activity = JSON.parse(message) as ActivityLike;
+  } else {
+    activity = {
+      type: "message",
+      text: message,
+    };
+  }
+  await app.send(conversationId, activity);
   res.send("ok");
 });
 

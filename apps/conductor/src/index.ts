@@ -1,4 +1,8 @@
-import { MentionEntity, MessageSendActivity } from "@microsoft/spark.api";
+import {
+  ActivityLike,
+  MentionEntity,
+  MessageSendActivity,
+} from "@microsoft/spark.api";
 import { App, HttpPlugin } from "@microsoft/spark.apps";
 import { DevtoolsPlugin } from "@microsoft/spark.dev";
 import { Message, MessageInitiator, Runtime } from "@repo/agent-contract";
@@ -88,10 +92,17 @@ const fakeRuntime: Runtime = {
             });
           }
         } else {
-          await app.send(recipient.conversationId, {
-            type: "message",
-            text: textToSend,
-          });
+          // TODO: Remove this ugly hack to send complex activitie to teams
+          let activity: ActivityLike;
+          if (textToSend.startsWith("{") && textToSend.endsWith("}")) {
+            activity = JSON.parse(textToSend) as ActivityLike;
+          } else {
+            activity = {
+              type: "message",
+              text: textToSend,
+            };
+          }
+          await app.send(recipient.conversationId, activity);
         }
       }
     }
@@ -140,6 +151,37 @@ const receiveMessageFromTeams = async (
 app.on("message", async ({ activity }) => {
   logger.debug("Receive message from teams");
   await receiveMessageFromTeams(activity.text, activity.conversation.id);
+});
+
+app.on("card.action", async ({ activity, send }) => {
+  logger.debug("Receive card action from teams", activity);
+  const taskId: string | undefined = activity.value.action.data.taskId;
+  if (!taskId) {
+    logger.warn("No task id found in card action");
+    return {
+      type: "message",
+      text: "No task id found in card action",
+      status: 400,
+    };
+  }
+
+  const action = activity.value.action.verb;
+  if (action === "approve") {
+    await receiveMessageFromTeams("Approved task", activity.conversation.id);
+  } else if (action === "deny") {
+    await send({
+      type: "message",
+      text: "Sounds good. Marking the task as cancelled.",
+    });
+    // TODO: Conductor agent should handle this.
+  } else {
+    logger.warn("Unknown action", action);
+  }
+  return {
+    type: "message",
+    text: "Card action received",
+    status: 200,
+  };
 });
 
 http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {

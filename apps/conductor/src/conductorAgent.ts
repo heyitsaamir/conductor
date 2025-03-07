@@ -1,4 +1,5 @@
 import { createAzure } from "@ai-sdk/azure";
+import { ActivityLike } from "@microsoft/spark.api";
 import {
   BaseAgent,
   ExactMessage,
@@ -165,11 +166,112 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
       subTasksMessage += ` ${i + 1}. ${subtask.description} (_@${agentName}_)\n`;
     }
 
-    const planMessage = `I have created a plan for you:
-Task: ${parentTask.description}
-Subtasks:
-${subTasksMessage}
+    const planPlainMessage = `
+    Plan:
+    ${parentTask.title}
+    ${parentTask.description}
+    ${subTasksMessage}
+
+    Does this plan look good?
     `;
+
+    const planMessage: ActivityLike = {
+      type: "message",
+      attachments: [
+        {
+          contentType: "application/vnd.microsoft.card.adaptive",
+          content: {
+            type: "AdaptiveCard",
+            $schema: "https://adaptivecards.io/schemas/adaptive-card.json",
+            version: "1.5",
+            body: [
+              {
+                type: "TextBlock",
+                text: "Plan",
+                wrap: true,
+                weight: "Bolder",
+                size: "ExtraLarge",
+              },
+              {
+                type: "TextBlock",
+                text: parentTask.title,
+                wrap: true,
+                size: "Large",
+                weight: "Bolder",
+              },
+              {
+                type: "TextBlock",
+                wrap: true,
+                isSubtle: true,
+                spacing: "Small",
+                text: "@Conductor",
+                size: "Small",
+              },
+              {
+                type: "TextBlock",
+                wrap: true,
+                text: parentTask.description,
+              },
+              ...subTasks.map((subtask) => ({
+                type: "Container",
+                items: [
+                  {
+                    type: "TextBlock",
+                    text: subtask.title,
+                    wrap: true,
+                    weight: "Bolder",
+                  },
+                  {
+                    type: "TextBlock",
+                    wrap: true,
+                    spacing: "Small",
+                    text: `@${subtask.assignedTo ?? "Unassigned"}`,
+                    isSubtle: true,
+                  },
+                  {
+                    type: "TextBlock",
+                    targetWidth: "AtLeast:Narrow",
+                    text: subtask.description,
+                    wrap: true,
+                    size: "Small",
+                  },
+                ],
+                separator: true,
+              })),
+              {
+                type: "TextBlock",
+                text: "Does this plan look good?",
+                wrap: true,
+                separator: true,
+              },
+              {
+                type: "ActionSet",
+                actions: [
+                  {
+                    type: "Action.Execute",
+                    title: "✅",
+                    verb: "approve",
+                    data: { taskId: parentTask.id },
+                  },
+                  {
+                    type: "Action.Execute",
+                    title: "❌",
+                    verb: "deny",
+                    data: { taskId: parentTask.id },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    // Update parent state
+    await conductorState.addMessage(parentTask.id, {
+      role: "user",
+      content: planPlainMessage,
+    });
 
     await this.runtime.sendMessage(
       {
@@ -177,12 +279,15 @@ ${subTasksMessage}
         status: "success",
         taskId: parentTask.id,
         result: {
-          message: planMessage,
+          message: JSON.stringify(planMessage),
         },
       },
       { type: "teams", conversationId: message.params.conversationId }
     );
-    await this.workflowExecutor.continueWorkflow(parentTask.id);
+    await this.taskManagementClient.updateTaskStatus(
+      parentTask.id,
+      "WaitingForUserResponse"
+    );
     await this.handleWorkflowCompletion(parentTask.id);
   }
 
