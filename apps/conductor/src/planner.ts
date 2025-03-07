@@ -85,7 +85,7 @@ ${WORKFLOW_GUIDANCE}
       messages,
     });
 
-    logger.info("Generated plan", {
+    logger.debug("Generated plan", {
       plan: generatedPlan,
     });
 

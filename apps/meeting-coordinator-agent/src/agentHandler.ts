@@ -69,7 +69,7 @@ export class AgentHandler extends BaseAgent<typeof HandleMessageCapability> {
     message: ExactMessage<typeof HandleMessageCapability>,
     initiator: MessageInitiator
   ): Promise<void> {
-    logger.info("onMessage", message);
+    logger.debug("onMessage", message);
 
     if (message.type === "do") {
       const messages = state[message.taskId]?.messages ?? [];
@@ -81,11 +81,11 @@ export class AgentHandler extends BaseAgent<typeof HandleMessageCapability> {
         messages,
       };
 
-      logger.info("messages", messages);
+      logger.debug("messages", messages);
 
       // Generate a response using AI
       const aiResponse = await this.generateResponse(messages);
-      logger.info("AI response", aiResponse);
+      logger.debug("AI response", aiResponse);
 
       if (aiResponse.clarificationQuestion) {
         messages.push({

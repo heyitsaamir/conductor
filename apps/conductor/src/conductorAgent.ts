@@ -291,7 +291,6 @@ ${subTasksMessage}
     // Make sure this is the parent
     let task = await this.taskManagementClient.getTask(taskId);
     if (task.parentId) {
-      logger.info("Handling completion for a subtask, getting the parent task");
       task = await this.taskManagementClient.getTask(task.parentId);
     }
     if (task.status !== "Done") {
@@ -301,6 +300,7 @@ ${subTasksMessage}
       return;
     }
 
+    logger.info("Handling completion for a subtask, getting the parent task");
     await this.runtime.sendMessage(
       {
         type: "did",

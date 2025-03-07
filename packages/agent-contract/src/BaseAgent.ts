@@ -21,7 +21,7 @@ abstract class BaseAgent<T extends Capability<any, any>> implements Agent<T> {
     message: ExactMessage<T>,
     _initiator: MessageInitiator
   ): Promise<void> {
-    logger.info(
+    logger.debug(
       `Base agent received ${message.type} message for task ${message.taskId}`,
       {
         class: this.constructor.name,

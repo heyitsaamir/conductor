@@ -24,7 +24,7 @@ const fakeRuntime: Runtime = {
       if (!agent) {
         throw new Error(`Agent ${recipient.id} not found`);
       }
-      logger.info("Sending message to agent", agent);
+      logger.debug("Sending message to agent", agent);
       const result = await fetch(`${agent.url}/recv`, {
         method: "POST",
         headers: {
@@ -63,7 +63,7 @@ const fakeRuntime: Runtime = {
           if (!agent) {
             throw new Error(`Agent ${recipient.byAgentId} not found`);
           }
-          logger.info("Sending message to agent", {
+          logger.debug("Sending message to agent", {
             agentUrl: agent.url,
             message: textToSend,
             conversationId: recipient.conversationId,
@@ -97,7 +97,7 @@ const fakeRuntime: Runtime = {
     }
   },
   receiveMessage: async (message: Message, sender: MessageInitiator) => {
-    logger.info("receiveMessage", message, sender);
+    logger.debug("receiveMessage", message, sender);
     if (message.type === "do") {
       await conductorAgent.onMessage(message as any, sender);
     } else {
@@ -138,7 +138,7 @@ const receiveMessageFromTeams = async (
 };
 
 app.on("message", async ({ activity }) => {
-  logger.info("Receive message from teams");
+  logger.debug("Receive message from teams");
   await receiveMessageFromTeams(activity.text, activity.conversation.id);
 });
 
@@ -287,7 +287,7 @@ http.post("/channelMessage", jsonParser, async (req: any, res: any) => {
     mentions: MentionEntity[];
   } = req.body;
   if (plainTextContent === "") {
-    logger.info("Ignore message with empty content");
+    logger.debug("Ignore message with empty content");
     res.status(200).send("ok");
     return;
   }
@@ -298,7 +298,7 @@ http.post("/channelMessage", jsonParser, async (req: any, res: any) => {
     res.status(200).send("ok");
     return;
   }
-  logger.info("Receive channel message", req.body);
+  logger.debug("Receive channel message", req.body);
   if (mentions.length > 0) {
     logger.warn("Ignoring message with mentions", {
       mentions,
@@ -322,7 +322,7 @@ http.post("/recv", jsonParser, async (req: any, res: any) => {
     return;
   }
   res.status(200).send("ok");
-  logger.info("Receive message from agent", {
+  logger.debug("Receive message from agent", {
     sender,
     message: req.body,
   });

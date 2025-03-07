@@ -35,7 +35,7 @@ http.post("/recv", jsonParser, async (req, res) => {
 });
 
 http.post("/sendAsTeamsMessage", jsonParser, async (req, res) => {
-  logger.info("sendAsTeamsMessage", req.body);
+  logger.debug("sendAsTeamsMessage", req.body);
   const { message, conversationId } = req.body;
   if (!message) {
     res.status(400).send("message is required");

@@ -14,7 +14,7 @@ export class WorkflowExecutor {
   async continueWorkflow(
     taskIdArg: string | Task
   ): Promise<"in-progress" | "completed" | "failed"> {
-    logger.info("Continuing workflow", { taskIdArg });
+    logger.debug("Continuing workflow", { taskIdArg });
     let task: Task;
 
     if (typeof taskIdArg === "string") {
@@ -34,13 +34,13 @@ export class WorkflowExecutor {
 
     const subTasks = await this.taskManagementClient.getSubtasks(task.id);
     if (this.isTaskTerminal(task)) {
-      logger.info("Task is terminal, skipping", { task });
+      logger.debug("Task is terminal, skipping", { task });
       return "completed";
     }
 
     const nextTask = this.getNextTask(subTasks);
     if (!nextTask) {
-      logger.info("No next task, marking task as completed", {
+      logger.debug("No next task, marking task as completed", {
         taskId: task.id,
       });
       await this.taskManagementClient.updateTaskStatus(task.id, "Done");
