@@ -14,7 +14,7 @@ import {
 import { CoreMessage, generateText } from "ai";
 import { defaultAgentStore } from "./agentStore";
 import { conductor } from "./conductorCapability";
-import { conductorState } from "./conductorState";
+import { conductorState, ConversationMessage } from "./conductorState";
 import { Planner } from "./planner";
 import { WorkflowExecutor } from "./workflowExecutor";
 type SupportedCapability = typeof conductor;
@@ -64,9 +64,16 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
           if (tasks.length === 1) {
             await this.addUserMessage(message.params.message, tasks[0]);
           } else if (tasks.length === 0) {
-            logger.error("No blocked tasks found for a do-message", {
-              conversationId: message.params.conversationId,
-            });
+            if (await this.hasIncompleteTasks(message.params.conversationId)) {
+              logger.error(
+                "There were incomplete tasks for this converstaion but no tasks are waiting for response"
+              );
+            } else {
+              logger.info(
+                "No blocked tasks found for a do-message, creating a new task"
+              );
+              await this.doConduct(message, initiator);
+            }
           } else {
             logger.error("Multiple blocked tasks found for a do-message", {
               conversationId: message.params.conversationId,
@@ -83,6 +90,29 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     }
   }
 
+  private async hasIncompleteTasks(conversationId: string) {
+    // Check if all the tasks for this conversation are done
+    const latestParentTask = await this.latestParentTask(conversationId);
+    return latestParentTask?.status !== "Done";
+  }
+
+  async latestParentTask(conversationId: string) {
+    const conversationStates =
+      await this.getTasksForConversation(conversationId);
+    const taskIds = conversationStates.map((state) => state.taskId);
+    const tasks = await this.taskManagementClient.listTasks({
+      ids: taskIds,
+    });
+    const parentTasks = tasks.filter((task) => !task.parentId);
+    if (parentTasks.length === 0) {
+      return null;
+    }
+    const latestParentTask = parentTasks.sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+    )[0];
+    return latestParentTask;
+  }
+
   async doConduct(
     message: Extract<AgentMessage, { type: "do" }>,
     _initiator: MessageInitiator
@@ -90,15 +120,30 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     const { parentTask, subTasks } = await this.buildAndSavePlan(
       message.params.message
     );
+
+    const latestParentTask = await this.latestParentTask(
+      message.params.conversationId
+    );
+
+    let initialMessages: ConversationMessage[] = [];
+    if (latestParentTask) {
+      const stateForLatestParentTask = await conductorState.getStateByTaskId(
+        latestParentTask.id
+      );
+      if (stateForLatestParentTask) {
+        initialMessages.push(...stateForLatestParentTask.messages);
+      }
+    }
+
+    initialMessages.push({
+      role: "user",
+      content: message.params.message,
+    });
+
     await conductorState.createInitialState(
       parentTask.id,
       message.params.conversationId,
-      [
-        {
-          role: "user",
-          content: message.params.message,
-        },
-      ]
+      initialMessages
     );
 
     for (const subTask of subTasks) {
