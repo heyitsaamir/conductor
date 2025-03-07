@@ -273,27 +273,32 @@ http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
 }
  */
 http.post("/channelMessage", jsonParser, async (req: any, res: any) => {
-  logger.info("Receive channel message", req.body);
   const {
     replyToId: parentMessageId,
     body: { plainTextContent },
     channelId,
-    from: { user },
+    from,
     mentions,
   }: {
     replyToId: string;
     body: { content: string; plainTextContent: string };
     channelId: string;
-    from: { user: { id: string } };
+    from: { user: { id: string } } | null;
     mentions: MentionEntity[];
   } = req.body;
-  if (user == null) {
+  if (plainTextContent === "") {
+    logger.info("Ignore message with empty content");
+    res.status(200).send("ok");
+    return;
+  }
+
+  if (from?.user == null) {
     logger.info("Ignore message from bot");
     // ignore messages from bots for now
     res.status(200).send("ok");
     return;
   }
-
+  logger.info("Receive channel message", req.body);
   if (mentions.length > 0) {
     logger.warn("Ignoring message with mentions", {
       mentions,

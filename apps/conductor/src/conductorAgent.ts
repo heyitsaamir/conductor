@@ -351,7 +351,7 @@ ${subTasksMessage}
 <RULES>
 1. You must only answer the question based on the conversation history provided.
 2. If you can answer the question based on the conversation history, start your response with "ANSWER:"
-3. If you cannot answer the question based on the conversation history, you must ask a follow-up question to the user. Start your response with "QUESTION FOR USER:"
+3. If you cannot answer the question based on the conversation history, you must ask a follow-up question to the user. Start your response with "QUESTION FOR USER:". Provide all the relevant context in the question.
 </RULES>
 `,
     });
