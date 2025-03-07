@@ -1,15 +1,26 @@
+import { createAzure } from "@ai-sdk/azure";
 import { DidRequest, Runtime } from "@repo/agent-contract";
 import { logger } from "@repo/common";
 import { Task, TaskManagementClient } from "@repo/task-management-interfaces";
+import { CoreMessage, generateText } from "ai";
 import { AgentStore } from "./agentStore";
 import { ConductorStateManager } from "./conductorState";
+
 export class WorkflowExecutor {
+  private openai;
+
   constructor(
     private taskManagementClient: TaskManagementClient,
     private runtime: Runtime,
     private conductorState: ConductorStateManager,
     private agentStore: AgentStore
-  ) {}
+  ) {
+    this.openai = createAzure({
+      apiKey: process.env.AZURE_OPENAI_API_KEY,
+      baseURL: process.env.AZURE_OPENAI_ENDPOINT,
+      apiVersion: "2024-10-21",
+    });
+  }
 
   async continueWorkflow(
     taskIdArg: string | Task
@@ -88,23 +99,84 @@ export class WorkflowExecutor {
     }
   }
 
+  private async buildFirstMessage(
+    task: Task,
+    parentState?: { messages: { role: string; content: string }[] } | null
+  ): Promise<string> {
+    if (!task.assignedTo) {
+      throw new Error("Task assignedTo is undefined");
+    }
+
+    const agent = this.agentStore.getById(task.assignedTo);
+    if (!agent) {
+      throw new Error("Agent not found");
+    }
+
+    const previousContext = parentState?.messages.length
+      ? `Previous context:\n${parentState.messages.map((msg) => `${msg.role}: ${msg.content}`).join("\n")}`
+      : "No previous context.";
+
+    const messages: CoreMessage[] = [
+      {
+        role: "system",
+        content: `You are a task delegator. You are responsible for sending a brief, clear and directive message to an AI agent that will execute a task.
+You will be given the agent's details, the task details, and some previous context from the user.
+
+<RULES>
+1. The message should be clear and directive, written as if you are delegating this task to the agent.
+2. The context contained in the message must be relevant to the task at hand.
+3. The message should be simple and concise. It should contain 1-2 sentences at most.
+          `,
+      },
+      {
+        role: "user",
+        content: `
+<AGENT DETAILS>
+Agent Name: ${agent.name}
+Agent Description: ${agent.description}
+</AGENT DETAILS>
+
+<TASK DETAILS>
+Task Description: ${task.description}
+</TASK DETAILS>
+
+<PREVIOUS CONTEXT>
+${previousContext}
+</PREVIOUS CONTEXT>
+
+Create a message for the given task to the given agent.`,
+      },
+    ];
+
+    const { text } = await generateText({
+      model: this.openai("gpt-4o"),
+      messages,
+    });
+
+    if (!text) {
+      throw new Error("Failed to generate message from LLM");
+    }
+
+    return text;
+  }
+
   private async prepareSubtaskForExecution(task: Task) {
     const taskState = await this.conductorState.getStateByTaskId(task.id);
     if (!taskState) return;
 
     const isFirstMessage = taskState.messages.length === 0;
     if (isFirstMessage) {
-      const firstMessage: string = task.description; // TODO: Ask the llm to build the first message based on previous messages
+      let parentState;
       if (task.parentId) {
-        const parentState = await this.conductorState.getStateByTaskId(
-          task.parentId
-        );
-        if (parentState) {
-          await this.conductorState.addMessage(parentState.taskId, {
-            role: "user",
-            content: firstMessage,
-          });
-        }
+        parentState = await this.conductorState.getStateByTaskId(task.parentId);
+      }
+      const firstMessage = await this.buildFirstMessage(task, parentState);
+
+      if (parentState) {
+        await this.conductorState.addMessage(parentState.taskId, {
+          role: "user",
+          content: firstMessage,
+        });
       }
       await this.conductorState.addMessage(task.id, {
         role: "user",
