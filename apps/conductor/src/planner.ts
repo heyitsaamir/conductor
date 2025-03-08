@@ -26,9 +26,12 @@ const taskPlanSchema = baseTaskPlanSchema.extend({
 type TaskPlan = z.infer<typeof taskPlanSchema>;
 
 const WORKFLOW_GUIDANCE = `
-When a new request comes in, the workflow is generally:
-1. Get lead information based on company details
+For new leads, the necessary work is:
+1. Qualify the lead
 2. Schedule a meeting with the lead.
+
+For proposal creation, the necessary work is:
+1. Generate a proposal for the lead based on the company details.
 `;
 
 export class Planner {
@@ -45,7 +48,10 @@ export class Planner {
     });
   }
 
-  public async plan(taskDescription: string): Promise<TaskPlan> {
+  public async plan(
+    taskDescription: string,
+    previousContext?: { messages: CoreMessage[] }
+  ): Promise<TaskPlan> {
     const availableAgents = this.agentStore.getAll();
     if (availableAgents.length === 0) {
       throw new Error("No agents available for task execution");
@@ -58,7 +64,7 @@ export class Planner {
       )
       .join("\n");
 
-    const systemPrompt = `You are a task planner that breaks down tasks into sequential subtasks.
+    let systemPrompt = `You are a task planner that breaks down tasks into sequential subtasks.
 Given the task description, workflow guidance, and available agents, create a plan with appropriate subtasks.
 Each subtask should be assigned to the most suitable agent.
 
@@ -69,6 +75,14 @@ ${agentDescriptions}
 ${WORKFLOW_GUIDANCE}
 </WORKFLOW_GUIDANCE>
 `;
+
+    if (previousContext) {
+      systemPrompt += `
+<PREVIOUS_CONTEXT>
+${previousContext.messages.map((m) => `${m.role}: ${m.content}`).join("\n")}
+</PREVIOUS_CONTEXT>
+`;
+    }
 
     const messages: CoreMessage[] = [
       { role: "system", content: systemPrompt },

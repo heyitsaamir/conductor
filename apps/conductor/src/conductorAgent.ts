@@ -15,7 +15,11 @@ import {
 import { CoreMessage, generateText } from "ai";
 import { defaultAgentStore } from "./agentStore";
 import { conductor } from "./conductorCapability";
-import { conductorState, ConversationMessage } from "./conductorState";
+import {
+  conductorState,
+  ConversationMessage,
+  ConversationStateData,
+} from "./conductorState";
 import { Planner } from "./planner";
 import { WorkflowExecutor } from "./workflowExecutor";
 type SupportedCapability = typeof conductor;
@@ -118,22 +122,24 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     message: Extract<AgentMessage, { type: "do" }>,
     _initiator: MessageInitiator
   ) {
-    const { parentTask, subTasks } = await this.buildAndSavePlan(
-      message.params.message
-    );
-
     const latestParentTask = await this.latestParentTask(
       message.params.conversationId
     );
-
-    let initialMessages: ConversationMessage[] = [];
+    let previousTask: ConversationStateData | undefined;
     if (latestParentTask) {
       const stateForLatestParentTask = await conductorState.getStateByTaskId(
         latestParentTask.id
       );
-      if (stateForLatestParentTask) {
-        initialMessages.push(...stateForLatestParentTask.messages);
-      }
+      previousTask = stateForLatestParentTask ?? undefined;
+    }
+    const { parentTask, subTasks } = await this.buildAndSavePlan(
+      message.params.message,
+      previousTask
+    );
+
+    let initialMessages: ConversationMessage[] = [];
+    if (previousTask) {
+      initialMessages.push(...previousTask.messages);
     }
 
     initialMessages.push({
@@ -304,14 +310,33 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
     );
     switch (message.status) {
       case "success": {
+        let messageToSend = message.result?.message ?? "Done!";
+        let messageToSave = messageToSend;
+        // Try to parse JSON message and extract plainTextMessage if it exists
+        if (
+          messageToSave.trim().startsWith("{") &&
+          messageToSave.trim().endsWith("}")
+        ) {
+          try {
+            const parsedMessage = JSON.parse(messageToSave);
+            if (parsedMessage.plainTextMessage) {
+              messageToSave = parsedMessage.plainTextMessage;
+            }
+          } catch (error) {
+            logger.debug("Failed to parse message as JSON", {
+              message: messageToSave,
+            });
+          }
+        }
+
         await conductorState.addMessage(message.taskId, {
           role: "assistant",
-          content: message.result.message ?? "Done!",
+          content: messageToSave,
         });
         if (updatedTask.parentId) {
           await conductorState.addMessage(updatedTask.parentId, {
             role: "assistant",
-            content: message.result.message ?? "Done!",
+            content: messageToSave,
           });
         }
         const taskState = await conductorState.getStateByTaskId(message.taskId);
@@ -327,7 +352,7 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
             status: "success",
             taskId: message.taskId,
             result: {
-              message: message.result.message ?? "Done!",
+              message: messageToSend,
             },
           },
           {
@@ -585,12 +610,15 @@ ${message}
     await this.handleWorkflowCompletion(blockedTask.id);
   }
 
-  async buildAndSavePlan(task: string): Promise<{
+  async buildAndSavePlan(
+    task: string,
+    previousTask?: ConversationStateData
+  ): Promise<{
     parentTask: Task;
     subTasks: Task[];
   }> {
     // Use planner to break down the task
-    const taskPlan = await this.planner.plan(task);
+    const taskPlan = await this.planner.plan(task, previousTask);
     // Save the parent task
     const savedParentTask = await this.taskManagementClient.createTask({
       title: taskPlan.title,

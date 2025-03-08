@@ -8,7 +8,7 @@ export const DoRequestSchema = z.intersection(
   }),
   z.object({
     method: z.string(),
-    params: z.record(z.any()).optional(),
+    params: z.record(z.any()).optional().nullable(),
   })
 );
 
@@ -41,13 +41,13 @@ type CapabilityDoRequestType<T extends Capability<any, any>> = Omit<
 // Result schema definitions
 const ErrorSchema = z.object({
   code: z.number(),
-  message: z.string().optional(),
-  data: z.unknown().optional(),
+  message: z.string().optional().nullable(),
+  data: z.unknown().optional().nullable(),
 });
 
 const ResultSchema = z
   .object({
-    message: z.string().optional(),
+    message: z.string().optional().nullable(),
   })
   .catchall(z.unknown());
 

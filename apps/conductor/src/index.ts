@@ -159,9 +159,9 @@ app.on("card.action", async ({ activity, send }) => {
   if (!taskId) {
     logger.warn("No task id found in card action");
     return {
-      type: "message",
-      text: "No task id found in card action",
-      status: 400,
+      type: "application/vnd.microsoft.activity.message",
+      value: "No task id found in card action",
+      status: 200,
     };
   }
 
@@ -178,9 +178,9 @@ app.on("card.action", async ({ activity, send }) => {
     logger.warn("Unknown action", action);
   }
   return {
-    type: "message",
-    text: "Card action received",
     status: 200,
+    type: "application/vnd.microsoft.activity.message",
+    value: "Got it!",
   };
 });
 

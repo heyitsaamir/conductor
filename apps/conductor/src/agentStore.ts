@@ -10,7 +10,7 @@ const KNOWN_AGENTS: AgentWithMembership[] = [
     id: "lead-qualification",
     name: "LeadQualificationAgent",
     description:
-      "A lead qualification agent that qualifies leads and assses new leads.",
+      "A lead qualification agent that qualifies leads and assses new leads. This agent can also look up details about a company.",
     url: "http://localhost:4000",
     channelMembership: [
       "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2",
@@ -22,6 +22,16 @@ const KNOWN_AGENTS: AgentWithMembership[] = [
     description:
       "A meeting coordinator agent that coordinates meetings between leads and sales reps and schedulees the meeting",
     url: "http://localhost:4001",
+    channelMembership: [
+      "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2",
+    ],
+  },
+  {
+    id: "proposal-agent",
+    name: "ProposalAgent",
+    description:
+      "A proposal agent that generates meeting preparation documents for leads",
+    url: "http://localhost:4002",
     channelMembership: [
       "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2",
     ],

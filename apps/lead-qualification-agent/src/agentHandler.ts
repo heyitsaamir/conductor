@@ -38,11 +38,13 @@ const assessmentSchema = z.object({
 const leadQualificationResponseSchema = z.object({
   assessment: assessmentSchema
     .describe("The assessment of the lead")
-    .optional(),
+    .optional()
+    .nullable(),
   clarificationQuestion: z
     .string()
-    .describe("A question to ask the user for more information")
-    .optional(),
+    .describe("A question to ask the user for more information.")
+    .optional()
+    .nullable(),
 });
 
 type LeadQualificationResponse = z.infer<
@@ -84,25 +86,36 @@ export class AgentHandler extends BaseAgent<typeof HandleMessageCapability> {
       const aiResponse = await this.generateResponse(messages);
       logger.debug("AI response", aiResponse);
 
-      if (aiResponse.clarificationQuestion) {
-        messages.push({
-          role: "assistant",
-          content: aiResponse.clarificationQuestion,
-        });
-        await this.runtime.sendMessage(
-          {
-            type: "did",
-            status: "needs_clarification",
-            taskId: message.taskId,
-            clarification: {
-              message: aiResponse.clarificationQuestion,
-            },
-          },
-          this.getRecipient(initiator)
-        );
-      } else if (aiResponse.assessment) {
-        const activity: ActivityLike = {
+      if (aiResponse.assessment) {
+        let plainTextMessage = `Assessment for ${aiResponse.assessment.companyName}`;
+        if (aiResponse.assessment.companyDescription) {
+          plainTextMessage += `Description: ${aiResponse.assessment.companyDescription}`;
+        }
+        if (aiResponse.assessment.companySize) {
+          plainTextMessage += `Size: ${aiResponse.assessment.companySize}`;
+        }
+        if (aiResponse.assessment.companyIndustry) {
+          plainTextMessage += `Industry: ${aiResponse.assessment.companyIndustry}`;
+        }
+        if (aiResponse.assessment.companyMainProduct) {
+          plainTextMessage += `Main Product: ${aiResponse.assessment.companyMainProduct}`;
+        }
+        if (aiResponse.assessment.companyRevenue) {
+          plainTextMessage += `Revenue: ${aiResponse.assessment.companyRevenue}`;
+        }
+        if (aiResponse.assessment.companyFounded) {
+          plainTextMessage += `Founded: ${aiResponse.assessment.companyFounded}`;
+        }
+        if (aiResponse.assessment.companyLocation) {
+          plainTextMessage += `Location: ${aiResponse.assessment.companyLocation}`;
+        }
+        if (aiResponse.assessment.companyCEO) {
+          plainTextMessage += `CEO: ${aiResponse.assessment.companyCEO}`;
+        }
+
+        const activity: ActivityLike & { plainTextMessage: string } = {
           type: "message",
+          plainTextMessage,
           attachments: [
             {
               contentType: "application/vnd.microsoft.card.adaptive",
@@ -177,6 +190,22 @@ export class AgentHandler extends BaseAgent<typeof HandleMessageCapability> {
           },
           this.getRecipient(initiator)
         );
+      } else if (aiResponse.clarificationQuestion) {
+        messages.push({
+          role: "assistant",
+          content: aiResponse.clarificationQuestion,
+        });
+        await this.runtime.sendMessage(
+          {
+            type: "did",
+            status: "needs_clarification",
+            taskId: message.taskId,
+            clarification: {
+              message: aiResponse.clarificationQuestion,
+            },
+          },
+          this.getRecipient(initiator)
+        );
       }
     } else {
       throw new Error("Unsupported message type");
@@ -204,8 +233,8 @@ Location: San Francisco, CA
 
 <RULES>
 1. If you have enough information to qualify the lead, provide a helpful response.
-2. If you need more information, ask a clarification question.
-3. If you have the company name, you can make up a company desscription and details about the company.
+2. If you need more information, ask a clarification question, but do NOT ask any irrelevant questions.
+3. If you have the company name, you can make up a company desscription and details about the company. If you do not have the company name, ask.
 </RULES>
 `;
 

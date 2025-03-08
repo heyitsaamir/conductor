@@ -5,8 +5,8 @@
   "id": "${{TEAMS_APP_ID}}",
   "packageName": "com.package.name",
   "name": {
-    "short": "Lead Qualification Agent",
-    "full": "Lead Qualification Agent"
+    "short": "Proposal Agent",
+    "full": "Proposal Agent"
   },
   "developer": {
     "name": "Microsoft",

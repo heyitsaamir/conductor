@@ -34,6 +34,7 @@ const meetingDetailsSchema = z.object({
   additionalNotes: z
     .string()
     .optional()
+    .nullable()
     .describe("Additional notes about the meeting"),
 });
 
@@ -41,12 +42,14 @@ const meetingDetailsSchema = z.object({
 const meetingCoordinatorResponseSchema = z.object({
   meetingDetails: meetingDetailsSchema
     .describe("The details of the scheduled meeting")
-    .optional(),
+    .optional()
+    .nullable(),
 
   clarificationQuestion: z
     .string()
     .describe("A question to ask the user for more information")
-    .optional(),
+    .optional()
+    .nullable(),
 });
 
 type MeetingCoordinatorResponse = z.infer<
@@ -105,8 +108,19 @@ export class AgentHandler extends BaseAgent<typeof HandleMessageCapability> {
           this.getRecipient(initiator)
         );
       } else if (aiResponse.meetingDetails) {
-        const activity: ActivityLike = {
+        let plainTextMessage = `Meeting Scheduled: ${aiResponse.meetingDetails.companyName}\n`;
+        plainTextMessage += `Meeting between ${aiResponse.meetingDetails.salesRepName} (${aiResponse.meetingDetails.salesRepTitle}) and ${aiResponse.meetingDetails.clientName}\n`;
+        plainTextMessage += `Date: ${aiResponse.meetingDetails.meetingDate}\n`;
+        plainTextMessage += `Time: ${aiResponse.meetingDetails.meetingTime}\n`;
+        plainTextMessage += `Duration: ${aiResponse.meetingDetails.meetingDuration}\n`;
+        plainTextMessage += `Meeting URL: ${aiResponse.meetingDetails.meetingUrl}`;
+        if (aiResponse.meetingDetails.additionalNotes) {
+          plainTextMessage += `\nAdditional Notes: ${aiResponse.meetingDetails.additionalNotes}`;
+        }
+
+        const activity: ActivityLike & { plainTextMessage: string } = {
           type: "message",
+          plainTextMessage,
           attachments: [
             {
               contentType: "application/vnd.microsoft.card.adaptive",
