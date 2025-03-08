@@ -34,8 +34,8 @@
       "scopes": ["personal"]
     },
     {
-      "name": "Tasks",
-      "entityId": "tasks",
+      "name": "Conductor",
+      "entityId": "conductor",
       "scopes": ["team"],
       "contentUrl": "https://98v29k49-5173.usw2.devtunnels.ms/tasks",
       "websiteUrl": "https://98v29k49-5173.usw2.devtunnels.ms/tasks"

@@ -213,9 +213,12 @@ Once you have the sales representative's name, you can make up other meeting det
 - Meeting dates between tomorrow and 2 weeks from now
 - Standard business hours
 
+Today's date is ${new Date().toISOString().split("T")[0]}.
+
 <RULES>
 1. First, confirm the sales representative's name if not provided
 2. Once you have the name, propose a meeting time explicitly and ask for confirmation. (e.g. "I propose a meeting on Tuesday at 10am. Does this work for you?")
+3. do NOT ask for the appointment slots from the user. You already have all this information (just make it up).
 3. Only mark the meeting as "booked" after receiving explicit confirmation
 4. Keep responses brief and focused
 </RULES>

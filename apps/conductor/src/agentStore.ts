@@ -10,7 +10,7 @@ const KNOWN_AGENTS: AgentWithMembership[] = [
     id: "lead-qualification",
     name: "LeadQualificationAgent",
     description:
-      "A lead qualification agent that qualifies leads and assses new leads. This agent can also look up details about a company.",
+      "This agent is responsible for retrieving and analyzing company information from databases. It can only look up and provide factual details about companies",
     url: "http://localhost:4000",
     channelMembership: [
       "19:sdTGyVjSon7lSr5XQ5944t_LWPc3OQKK48eke2ogJZE1@thread.tacv2",

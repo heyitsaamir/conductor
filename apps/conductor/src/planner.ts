@@ -26,11 +26,11 @@ const taskPlanSchema = baseTaskPlanSchema.extend({
 type TaskPlan = z.infer<typeof taskPlanSchema>;
 
 const WORKFLOW_GUIDANCE = `
-For new leads, the necessary work is:
-1. Qualify the lead
+When a new request comes in, the workflow is generally:
+1. Learn more about the lead and their company details.
 2. Schedule a meeting with the lead.
 
-For proposal creation, the necessary work is:
+When a meeting preparation document is requested, the workflow is:
 1. Generate a proposal for the lead based on the company details.
 `;
 

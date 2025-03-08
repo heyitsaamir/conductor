@@ -34,6 +34,7 @@ interface CustomLogger {
   DBG: LogMethod;
 }
 
+const INDENT = 16;
 const DIM_CODE = "\x1b[2m";
 const RESET_CODE = "\x1b[0m";
 
@@ -42,14 +43,14 @@ const chars = {
   startLine: "┏",
   line: "┃",
   endLine: "┗",
-} as const;
+};
 
 function formatIndentedLine(
   line: string,
   lineType: keyof typeof chars,
   isDimmed = true
 ): string {
-  const padding = " ".repeat(2);
+  const padding = " ".repeat(2); // Just a small padding after the connector
   const connector = chars[lineType];
   return isDimmed
     ? `${DIM_CODE}${connector}${padding}${line}${RESET_CODE}`
@@ -77,17 +78,31 @@ function formatMultilineContent(
     .join("\n");
 }
 
-function formatMessage(message: unknown): string {
+function formatMessage(message: unknown, ...args: unknown[]): string {
+  // Convert message to string
   const messageStr =
     typeof message === "object" && message !== null
       ? JSON.stringify(message, null, 2)
       : String(message);
 
+  // Convert and join arguments
+  const argsStr = args
+    .map((arg) =>
+      typeof arg === "object" && arg !== null
+        ? JSON.stringify(arg)
+        : String(arg)
+    )
+    .join(" ");
+
+  // Combine message and args
+  const fullMessage = argsStr ? `${messageStr} ${argsStr}` : messageStr;
+
+  // Format the full message
   return (
     "\n" +
-    (messageStr.includes("\n")
-      ? formatMultilineContent(messageStr, true)
-      : formatIndentedLine(messageStr, "singleLine", false))
+    (fullMessage.includes("\n")
+      ? formatMultilineContent(fullMessage, true)
+      : formatIndentedLine(fullMessage, "singleLine", false))
   );
 }
 
@@ -107,10 +122,27 @@ const consoleTransport = new winston.transports.Console({
     winston.format.timestamp({ format: "HH:mm:ss" }),
     winston.format.printf((info: winston.Logform.TransformableInfo) => {
       const prefix = `[${info.level}]`.padEnd(5) + `[${info.timestamp}]`;
+
+      // Debug log to see what we're getting
+      console.dir(info, { depth: null });
+
       const { level, timestamp, message, stack, ...meta } = info;
 
-      const messageStr = formatMessage(message);
-      const metaInfo = formatMetaInfo(meta);
+      // Combine all arguments into a single array
+      const args = [];
+      const realMeta: Record<string, unknown> = {};
+
+      // Process all meta entries
+      for (const [key, value] of Object.entries(meta)) {
+        if (key === "0" || key === "1" || key === "2") {
+          args.push(value);
+        } else if (key !== "splat") {
+          realMeta[key] = value;
+        }
+      }
+
+      const messageStr = formatMessage(message, ...args);
+      const metaInfo = formatMetaInfo(realMeta);
       const stackInfo = formatStack(stack);
 
       return `${prefix}${messageStr}${metaInfo}${stackInfo}`;
@@ -125,6 +157,7 @@ const logger = winston.createLogger({
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.errors({ stack: true }),
+    winston.format.splat(),
     winston.format.json()
   ),
   transports: [consoleTransport],

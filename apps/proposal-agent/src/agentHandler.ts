@@ -74,23 +74,7 @@ export class AgentHandler extends BaseAgent<typeof HandleMessageCapability> {
       const aiResponse = await this.generateResponse(messages);
       logger.debug("AI response", aiResponse);
 
-      if (aiResponse.clarificationQuestion) {
-        messages.push({
-          role: "assistant",
-          content: aiResponse.clarificationQuestion,
-        });
-        await this.runtime.sendMessage(
-          {
-            type: "did",
-            status: "needs_clarification",
-            taskId: message.taskId,
-            clarification: {
-              message: aiResponse.clarificationQuestion,
-            },
-          },
-          this.getRecipient(initiator)
-        );
-      } else if (aiResponse.proposedProposal) {
+      if (aiResponse.proposedProposal) {
         messages.push({
           role: "assistant",
           content: aiResponse.proposedProposal,
@@ -103,6 +87,22 @@ export class AgentHandler extends BaseAgent<typeof HandleMessageCapability> {
             taskId: message.taskId,
             result: {
               message: aiResponse.proposedProposal,
+            },
+          },
+          this.getRecipient(initiator)
+        );
+      } else if (aiResponse.clarificationQuestion) {
+        messages.push({
+          role: "assistant",
+          content: aiResponse.clarificationQuestion,
+        });
+        await this.runtime.sendMessage(
+          {
+            type: "did",
+            status: "needs_clarification",
+            taskId: message.taskId,
+            clarification: {
+              message: aiResponse.clarificationQuestion,
             },
           },
           this.getRecipient(initiator)

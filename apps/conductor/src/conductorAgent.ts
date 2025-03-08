@@ -104,17 +104,28 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
   async latestParentTask(conversationId: string) {
     const conversationStates =
       await this.getTasksForConversation(conversationId);
+
+    logger.info("[latestParentTask] Conversation states", {
+      conversationStates,
+    });
     const taskIds = conversationStates.map((state) => state.taskId);
+    if (taskIds.length === 0) {
+      return null;
+    }
+    // logger.info("[latestParentTask] Task ids", { taskIds });
     const tasks = await this.taskManagementClient.listTasks({
       ids: taskIds,
     });
+    // logger.info("[latestParentTask] Tasks", { tasks });
     const parentTasks = tasks.filter((task) => !task.parentId);
     if (parentTasks.length === 0) {
       return null;
     }
+    // logger.info("[latestParentTask] Parent tasks", { parentTasks });
     const latestParentTask = parentTasks.sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
     )[0];
+    // logger.info("[latestParentTask] Latest parent task", { latestParentTask });
     return latestParentTask;
   }
 

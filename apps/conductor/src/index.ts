@@ -149,7 +149,7 @@ const receiveMessageFromTeams = async (
 };
 
 app.on("message", async ({ activity }) => {
-  logger.debug("Receive message from teams");
+  logger.debug("Receive message from teams", activity);
   await receiveMessageFromTeams(activity.text, activity.conversation.id);
 });
 
@@ -184,10 +184,13 @@ app.on("card.action", async ({ activity, send }) => {
   };
 });
 
-http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
-  console.log("customerFeedback");
+http.post("/leads", jsonParser, async (req: any, res: any) => {
+  console.log("new lead received");
   console.log(req.body);
-  const { name, email, summary, reproSteps } = req.body;
+  const { name, email, company, details, phoneNumber } = req.body;
+
+  // Send notification message about the new lead
+  const leadMessage = `A new lead messaged! Details:\nName: ${name}\nCompany: ${company}\nTheir message: ${details}`;
 
   const adaptiveCard = {
     type: "AdaptiveCard",
@@ -196,7 +199,7 @@ http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
     body: [
       {
         type: "TextBlock",
-        text: "New Customer Feedback",
+        text: "New Lead",
         weight: "Bolder",
         size: "Large",
         wrap: true,
@@ -209,33 +212,29 @@ http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
             value: name,
           },
           {
+            title: "Company",
+            value: company,
+          },
+          {
             title: "Email",
             value: email,
+          },
+          {
+            title: "Phone",
+            value: phoneNumber,
           },
         ],
       },
       {
         type: "TextBlock",
-        text: "Issue Summary",
+        text: "Message",
         weight: "Bolder",
         wrap: true,
         spacing: "Medium",
       },
       {
         type: "TextBlock",
-        text: summary,
-        wrap: true,
-      },
-      {
-        type: "TextBlock",
-        text: "Reproduction Steps",
-        weight: "Bolder",
-        wrap: true,
-        spacing: "Medium",
-      },
-      {
-        type: "TextBlock",
-        text: reproSteps,
+        text: details,
         wrap: true,
       },
     ],
@@ -245,7 +244,7 @@ http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
     isGroup: true,
     channelData: {
       channel: {
-        id: "19:1d2b41a25f934efcbc4d442d896c0f43@thread.tacv2",
+        id: "19:1362e88b30ec46afb0c1638248ceaac3@thread.tacv2",
       },
     },
     activity: {
@@ -258,10 +257,8 @@ http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
       ],
     } as MessageSendActivity,
   });
-  await app.send(conversationResource.id, {
-    type: "message",
-    text: "This works still",
-  });
+
+  await receiveMessageFromTeams(leadMessage, conversationResource.id);
   res.status(200).send("ok");
 });
 
@@ -317,22 +314,30 @@ http.post("/customerFeedback", jsonParser, async (req: any, res: any) => {
 http.post("/channelMessage", jsonParser, async (req: any, res: any) => {
   const {
     replyToId: parentMessageId,
-    body: { plainTextContent },
+    body,
     channelId,
     from,
     mentions,
   }: {
     replyToId: string;
-    body: { content: string; plainTextContent: string };
+    body?: { content: string; plainTextContent: string };
     channelId: string;
     from: { user: { id: string } } | null;
     mentions: MentionEntity[];
   } = req.body;
-  if (plainTextContent === "") {
+  if (body == null) {
+    logger.debug("Ignore message with no body");
+    res.status(200).send("ok");
+    return;
+  }
+
+  if (body.plainTextContent === "") {
     logger.debug("Ignore message with empty content");
     res.status(200).send("ok");
     return;
   }
+
+  const { plainTextContent } = body;
 
   if (from?.user == null) {
     logger.info("Ignore message from bot");
