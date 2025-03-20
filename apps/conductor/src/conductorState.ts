@@ -12,6 +12,7 @@ export interface ConversationStateData {
   messages: ConversationMessage[];
   taskId: string;
   createdAt: number;
+  planActivityId?: string;
 }
 
 export interface ConductorState {
@@ -51,7 +52,8 @@ export class ConductorStateManager {
   async setConversationState(
     taskId: string,
     conversationId: string,
-    messages: ConversationMessage[]
+    messages: ConversationMessage[],
+    planActivityId?: string
   ): Promise<ConversationStateData> {
     const stateId = `${taskId}-${Date.now()}`;
     const state: ConversationStateData = {
@@ -60,6 +62,7 @@ export class ConductorStateManager {
       taskId,
       messages,
       createdAt: Date.now(),
+      planActivityId,
     };
 
     await this.storage.setConversationState(stateId, state);
@@ -86,6 +89,17 @@ export class ConductorStateManager {
     };
   }
 
+  async setPlanActivityId(
+    taskId: string,
+    planActivityId: string
+  ): Promise<void> {
+    return this.storage.setPlanActivityId(taskId, planActivityId);
+  }
+
+  async getPlanActivityId(taskId: string): Promise<string | null> {
+    return this.storage.getPlanActivityId(taskId);
+  }
+
   async getConversationStates(
     conversationId: string
   ): Promise<ConversationStateData[]> {
@@ -95,7 +109,8 @@ export class ConductorStateManager {
   async createInitialState(
     taskId: string,
     conversationId: string,
-    initialMessages: ConversationMessage[] = []
+    initialMessages: ConversationMessage[] = [],
+    planActivityId?: string
   ): Promise<ConversationStateData> {
     // Check if a state already exists for this task
     const existingState = await this.getStateByTaskId(taskId);
@@ -103,7 +118,18 @@ export class ConductorStateManager {
       throw new Error(`State already exists for task ID: ${taskId}`);
     }
 
-    return this.setConversationState(taskId, conversationId, initialMessages);
+    const stateId = `${taskId}-${Date.now()}`;
+    const state: ConversationStateData = {
+      stateId,
+      conversationId,
+      taskId,
+      messages: initialMessages,
+      createdAt: Date.now(),
+      planActivityId,
+    };
+
+    await this.storage.setConversationState(stateId, state);
+    return state;
   }
 }
 

@@ -1,10 +1,10 @@
-import { Message } from "./agentContract";
-
-import { MessageInitiator } from "./agentContract";
+import { Message, MessageInitiator } from "./agentContract";
 
 interface Runtime {
-  sendMessage(message: Message, recipient: MessageInitiator): Promise<void>;
+  sendMessage(
+    message: Message,
+    recipient: MessageInitiator
+  ): Promise<string | undefined>;
   receiveMessage(message: Message, sender: MessageInitiator): Promise<void>;
 }
-
 export default Runtime;

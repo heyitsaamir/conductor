@@ -1,5 +1,6 @@
 import { createAzure } from "@ai-sdk/azure";
-import { ActivityLike } from "@microsoft/spark.api";
+import { toActivityParams } from "@microsoft/spark.api";
+import { App } from "@microsoft/spark.apps";
 import {
   BaseAgent,
   ExactMessage,
@@ -20,6 +21,7 @@ import {
   ConversationMessage,
   ConversationStateData,
 } from "./conductorState";
+import { PlanCard } from "./planCard";
 import { Planner } from "./planner";
 import { WorkflowExecutor } from "./workflowExecutor";
 type SupportedCapability = typeof conductor;
@@ -37,18 +39,44 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
   private planner: Planner;
   private taskManagementClient: TaskManagementClient;
   private workflowExecutor: WorkflowExecutor;
-  constructor(runtime: Runtime) {
+  private teamsApp: App;
+
+  constructor(runtime: Runtime, teamsApp: App) {
     super(runtime, [conductor]);
     this.planner = new Planner(defaultAgentStore);
     this.taskManagementClient = new TaskManagementClient(
       "http://localhost:3002"
     );
+    this.teamsApp = teamsApp;
     this.workflowExecutor = new WorkflowExecutor(
       this.taskManagementClient,
       this.runtime,
       conductorState,
       defaultAgentStore
     );
+    this.subscribeToTaskUpdates();
+  }
+
+  private subscribeToTaskUpdates() {
+    this.workflowExecutor.on("taskStatusChanged", async (task: Task) => {
+      const taskState = await conductorState.getStateByTaskId(task.id);
+      if (!taskState) return;
+
+      const parentTask = task.parentId
+        ? await this.taskManagementClient.getTask(task.parentId)
+        : task;
+
+      const planActivityId = await conductorState.getPlanActivityId(
+        parentTask.id
+      );
+      if (!planActivityId) return;
+
+      await this.updatePlanCard(
+        parentTask.id,
+        planActivityId,
+        taskState.conversationId
+      );
+    });
   }
 
   async onMessage(message: AgentMessage, initiator: MessageInitiator) {
@@ -98,6 +126,9 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
   private async hasIncompleteTasks(conversationId: string) {
     // Check if all the tasks for this conversation are done
     const latestParentTask = await this.latestParentTask(conversationId);
+    if (!latestParentTask) {
+      return false;
+    }
     return latestParentTask?.status !== "Done";
   }
 
@@ -172,117 +203,15 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
       );
     }
 
-    let subTasksMessage = "";
-    for (let i = 0; i < subTasks.length; i++) {
-      let agentName = "";
-      const subtask = subTasks[i];
-      if (subtask.assignedTo) {
-        const agent = await defaultAgentStore.getById(subtask.assignedTo);
-        agentName = agent?.name ?? "";
-      }
-      subTasksMessage += ` ${i + 1}. ${subtask.description} (_@${agentName}_)\n`;
-    }
-
+    const planMessage = PlanCard.createCard(parentTask, subTasks, true);
     const planPlainMessage = `
     Plan:
     ${parentTask.title}
     ${parentTask.description}
-    ${subTasksMessage}
+    ${subTasks.map((subtask, i) => ` ${i + 1}. ${subtask.description} (_@${subtask.assignedTo ?? "Unassigned"}_)\n`).join("")}
 
     Does this plan look good?
     `;
-
-    const planMessage: ActivityLike = {
-      type: "message",
-      attachments: [
-        {
-          contentType: "application/vnd.microsoft.card.adaptive",
-          content: {
-            type: "AdaptiveCard",
-            $schema: "https://adaptivecards.io/schemas/adaptive-card.json",
-            version: "1.5",
-            body: [
-              {
-                type: "TextBlock",
-                text: "Plan",
-                wrap: true,
-                weight: "Bolder",
-                size: "ExtraLarge",
-              },
-              {
-                type: "TextBlock",
-                text: parentTask.title,
-                wrap: true,
-                size: "Large",
-                weight: "Bolder",
-              },
-              {
-                type: "TextBlock",
-                wrap: true,
-                isSubtle: true,
-                spacing: "Small",
-                text: "@Conductor",
-                size: "Small",
-              },
-              {
-                type: "TextBlock",
-                wrap: true,
-                text: parentTask.description,
-              },
-              ...subTasks.map((subtask) => ({
-                type: "Container",
-                items: [
-                  {
-                    type: "TextBlock",
-                    text: subtask.title,
-                    wrap: true,
-                    weight: "Bolder",
-                  },
-                  {
-                    type: "TextBlock",
-                    wrap: true,
-                    spacing: "Small",
-                    text: `@${subtask.assignedTo ?? "Unassigned"}`,
-                    isSubtle: true,
-                  },
-                  {
-                    type: "TextBlock",
-                    targetWidth: "AtLeast:Narrow",
-                    text: subtask.description,
-                    wrap: true,
-                    size: "Small",
-                  },
-                ],
-                separator: true,
-              })),
-              {
-                type: "TextBlock",
-                text: "Does this plan look good?",
-                wrap: true,
-                separator: true,
-              },
-              {
-                type: "ActionSet",
-                actions: [
-                  {
-                    type: "Action.Execute",
-                    title: "✅",
-                    verb: "approve",
-                    data: { taskId: parentTask.id },
-                  },
-                  {
-                    type: "Action.Execute",
-                    title: "❌",
-                    verb: "deny",
-                    data: { taskId: parentTask.id },
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      ],
-    };
 
     // Update parent state
     await conductorState.addMessage(parentTask.id, {
@@ -290,7 +219,7 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
       content: planPlainMessage,
     });
 
-    await this.runtime.sendMessage(
+    const result = await this.runtime.sendMessage(
       {
         type: "did",
         status: "success",
@@ -301,6 +230,12 @@ export class ConductorAgent extends BaseAgent<SupportedCapability> {
       },
       { type: "teams", conversationId: message.params.conversationId }
     );
+
+    // Save the plan message ID if it exists
+    if (result) {
+      await conductorState.setPlanActivityId(parentTask.id, result);
+    }
+
     await this.taskManagementClient.updateTaskStatus(
       parentTask.id,
       "WaitingForUserResponse"
@@ -660,5 +595,22 @@ ${message}
       parentTask: savedParentTask,
       subTasks: savedSubTasks,
     };
+  }
+
+  private async updatePlanCard(
+    planTaskId: string,
+    planActivityId: string,
+    conversationMessageId: string
+  ) {
+    const task = await this.taskManagementClient.getTask(planTaskId);
+    if (!task) return;
+
+    const subTasks = await this.taskManagementClient.getSubtasks(planTaskId);
+
+    const planMessage = PlanCard.createCard(task, subTasks, false);
+
+    await this.teamsApp.api.conversations
+      .activities(conversationMessageId)
+      .update(planActivityId, toActivityParams(planMessage));
   }
 }

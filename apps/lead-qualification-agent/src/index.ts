@@ -2,6 +2,7 @@ import { ActivityLike } from "@microsoft/spark.api";
 import { App, HttpPlugin } from "@microsoft/spark.apps";
 import { logger } from "@repo/common";
 import { AgentRuntime } from "@repo/simple-agent-runtime";
+import assert from "assert";
 import bodyParser from "body-parser";
 import { AgentHandler } from "./agentHandler";
 
@@ -51,8 +52,9 @@ http.post("/sendAsTeamsMessage", jsonParser, async (req, res) => {
       text: message,
     };
   }
-  await app.send(conversationId, activity);
-  res.send("ok");
+  const result = await app.send(conversationId, activity);
+  assert(result.id, "Sending a message to teams should always return an id");
+  res.send({ id: result.id });
 });
 
 (async () => {

@@ -1,8 +1,4 @@
-import {
-  ActivityLike,
-  MentionEntity,
-  MessageSendActivity,
-} from "@microsoft/spark.api";
+import { ActivityLike, MentionEntity } from "@microsoft/spark.api";
 import { App, HttpPlugin } from "@microsoft/spark.apps";
 import { DevtoolsPlugin } from "@microsoft/spark.dev";
 import { Message, MessageInitiator, Runtime } from "@repo/agent-contract";
@@ -22,7 +18,10 @@ const app = new App({
 let conductorAgent: ConductorAgent;
 
 const fakeRuntime: Runtime = {
-  sendMessage: async (message: Message, recipient: MessageInitiator) => {
+  sendMessage: async (
+    message: Message,
+    recipient: MessageInitiator
+  ): Promise<string | undefined> => {
     if (recipient.type === "delegate") {
       const agent = defaultAgentStore.getById(recipient.id);
       if (!agent) {
@@ -45,11 +44,11 @@ const fakeRuntime: Runtime = {
           statusText: result.statusText,
         });
       }
-    } else {
+    } else if (recipient.type === "teams") {
       if (message.type === "do") {
         throw new Error("Unsupported message type");
       }
-      let textToSend: string | undefined;
+      let textToSend: string | undefined | null;
       switch (message.status) {
         case "success":
           textToSend = message.result.message;
@@ -61,49 +60,56 @@ const fakeRuntime: Runtime = {
           textToSend = message.clarification.message;
           break;
       }
-      if (textToSend) {
-        if (recipient.byAgentId) {
-          const agent = defaultAgentStore.getById(recipient.byAgentId);
-          if (!agent) {
-            throw new Error(`Agent ${recipient.byAgentId} not found`);
-          }
-          logger.debug("Sending message to agent", {
-            agentUrl: agent.url,
+      if (!textToSend) {
+        throw new Error("No message to send");
+      }
+      if (recipient.byAgentId) {
+        const agent = defaultAgentStore.getById(recipient.byAgentId);
+        if (!agent) {
+          throw new Error(`Agent ${recipient.byAgentId} not found`);
+        }
+        logger.debug("Sending message to agent", {
+          agentUrl: agent.url,
+          message: textToSend,
+          conversationId: recipient.conversationId,
+        });
+        const result = await fetch(`${agent.url}/sendAsTeamsMessage`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-sender-id": "conductor",
+          },
+          body: JSON.stringify({
             message: textToSend,
             conversationId: recipient.conversationId,
+          }),
+        });
+        if (!result.ok) {
+          logger.error("Failed to send message to agent", {
+            agent: agent.id,
+            message: message,
+            status: result.status,
+            statusText: result.statusText,
           });
-          const result = await fetch(`${agent.url}/sendAsTeamsMessage`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-sender-id": "conductor",
-            },
-            body: JSON.stringify({
-              message: textToSend,
-              conversationId: recipient.conversationId,
-            }),
-          });
-          if (!result.ok) {
-            logger.error("Failed to send message to agent", {
-              agent: agent.id,
-              message: message,
-              status: result.status,
-              statusText: result.statusText,
-            });
-          }
+          throw new Error("Failed to send message to agent");
         } else {
-          // TODO: Remove this ugly hack to send complex activitie to teams
-          let activity: ActivityLike;
-          if (textToSend.startsWith("{") && textToSend.endsWith("}")) {
-            activity = JSON.parse(textToSend) as ActivityLike;
-          } else {
-            activity = {
-              type: "message",
-              text: textToSend,
-            };
-          }
-          await app.send(recipient.conversationId, activity);
+          const json = await result.json();
+          return json.id;
         }
+      } else {
+        // TODO: Remove this ugly hack to send complex activities to teams
+        let activity: ActivityLike;
+        if (textToSend.startsWith("{") && textToSend.endsWith("}")) {
+          activity = JSON.parse(textToSend) as ActivityLike;
+        } else {
+          activity = {
+            type: "message",
+            text: textToSend,
+          };
+        }
+        const result = await app.send(recipient.conversationId, activity);
+
+        return result.id;
       }
     }
   },
@@ -117,7 +123,7 @@ const fakeRuntime: Runtime = {
   },
 };
 
-conductorAgent = new ConductorAgent(fakeRuntime);
+conductorAgent = new ConductorAgent(fakeRuntime, app);
 
 // Configure CORS
 http.use(cors());
@@ -167,11 +173,17 @@ app.on("card.action", async ({ activity, send }) => {
 
   const action = activity.value.action.verb;
   if (action === "approve") {
-    await receiveMessageFromTeams("Approved task", activity.conversation.id);
+    receiveMessageFromTeams("Approved task", activity.conversation.id).catch(
+      (err) => {
+        logger.error("Failed to send message to teams", err);
+      }
+    );
   } else if (action === "deny") {
-    await send({
+    send({
       type: "message",
       text: "Sounds good. Marking the task as cancelled.",
+    }).catch((err) => {
+      logger.error("Failed to send message to teams", err);
     });
     // TODO: Conductor agent should handle this.
   } else {
@@ -180,7 +192,9 @@ app.on("card.action", async ({ activity, send }) => {
   return {
     status: 200,
     type: "application/vnd.microsoft.activity.message",
-    value: "Got it!",
+    value: {
+      text: "Approved task",
+    },
   };
 });
 
@@ -255,7 +269,7 @@ http.post("/leads", jsonParser, async (req: any, res: any) => {
           content: adaptiveCard,
         },
       ],
-    } as MessageSendActivity,
+    },
   });
 
   await receiveMessageFromTeams(leadMessage, conversationResource.id);

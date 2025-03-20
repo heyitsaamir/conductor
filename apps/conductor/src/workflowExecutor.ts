@@ -1,12 +1,32 @@
 import { createAzure } from "@ai-sdk/azure";
-import { DidRequest, Runtime } from "@repo/agent-contract";
+import { Runtime } from "@repo/agent-contract";
 import { logger } from "@repo/common";
-import { Task, TaskManagementClient } from "@repo/task-management-interfaces";
+import {
+  Task,
+  TaskManagementClient,
+  TaskStatus,
+} from "@repo/task-management-interfaces";
 import { CoreMessage, generateText } from "ai";
+import { EventEmitter } from "events";
 import { AgentStore } from "./agentStore";
 import { ConductorStateManager } from "./conductorState";
 
-export class WorkflowExecutor {
+interface WorkflowEvents {
+  taskStatusChanged: (task: Task) => void;
+}
+
+export declare interface WorkflowExecutor {
+  on<K extends keyof WorkflowEvents>(
+    event: K,
+    listener: WorkflowEvents[K]
+  ): this;
+  emit<K extends keyof WorkflowEvents>(
+    event: K,
+    ...args: Parameters<WorkflowEvents[K]>
+  ): boolean;
+}
+
+export class WorkflowExecutor extends EventEmitter {
   private openai;
 
   constructor(
@@ -15,6 +35,7 @@ export class WorkflowExecutor {
     private conductorState: ConductorStateManager,
     private agentStore: AgentStore
   ) {
+    super();
     this.openai = createAzure({
       apiKey: process.env.AZURE_OPENAI_API_KEY,
       baseURL: process.env.AZURE_OPENAI_ENDPOINT,
@@ -55,12 +76,14 @@ export class WorkflowExecutor {
         taskId: task.id,
       });
       await this.taskManagementClient.updateTaskStatus(task.id, "Done");
+      this.emit("taskStatusChanged", task);
       return "completed";
     }
 
     // Set the task as in progress
     if (task.status !== "InProgress") {
       await this.taskManagementClient.updateTaskStatus(task.id, "InProgress");
+      this.emit("taskStatusChanged", task);
     }
     await this.continueSubtask(nextTask);
     return "in-progress";
@@ -79,24 +102,40 @@ export class WorkflowExecutor {
     return "in-progress";
   }
 
-  async handleSubtaskResult(taskId: string, message: DidRequest) {
-    switch (message.status) {
-      case "success":
-        return await this.taskManagementClient.updateTaskStatus(taskId, "Done");
-        break;
-      case "error":
-        return await this.taskManagementClient.updateTaskStatus(
-          taskId,
-          "Error"
-        );
-        break;
-      case "needs_clarification":
-        return await this.taskManagementClient.updateTaskStatus(
-          taskId,
-          "WaitingForUserResponse"
-        );
-        break;
+  async handleSubtaskResult(taskId: string, result: any) {
+    const task = await this.taskManagementClient.getTask(taskId);
+    if (!task) {
+      throw new Error("Task not found");
     }
+
+    switch (result.status) {
+      case "success": {
+        await this.taskManagementClient.updateTaskStatus(
+          taskId,
+          "Done" as TaskStatus
+        );
+        this.emit("taskStatusChanged", task);
+        break;
+      }
+      case "error": {
+        await this.taskManagementClient.updateTaskStatus(
+          taskId,
+          "Error" as TaskStatus
+        );
+        this.emit("taskStatusChanged", task);
+        break;
+      }
+      case "needs_clarification": {
+        await this.taskManagementClient.updateTaskStatus(
+          taskId,
+          "WaitingForUserResponse" as TaskStatus
+        );
+        this.emit("taskStatusChanged", task);
+        break;
+      }
+    }
+
+    return task;
   }
 
   private async buildFirstMessage(

@@ -48,6 +48,8 @@ export class AgentRuntime implements Runtime {
     } else {
       throw new Error("Unsupported recipient type");
     }
+
+    return undefined;
   };
 
   receiveMessage = async (message: Message, sender: MessageInitiator) => {

@@ -7,6 +7,7 @@ interface ConversationStateRow {
   messages: string;
   taskId: string;
   createdAt: number;
+  planActivityId?: string;
 }
 
 export class SQLiteConductorStorage {
@@ -25,7 +26,8 @@ export class SQLiteConductorStorage {
             conversationId TEXT NOT NULL,
             messages TEXT NOT NULL,
             taskId TEXT NOT NULL,
-            createdAt INTEGER NOT NULL
+            createdAt INTEGER NOT NULL,
+            planActivityId TEXT
           )`,
           (err) => {
             if (err) reject(err);
@@ -61,14 +63,15 @@ export class SQLiteConductorStorage {
     return new Promise((resolve, reject) => {
       this.db.run(
         `INSERT OR REPLACE INTO conversation_states (
-          stateId, conversationId, messages, taskId, createdAt
-        ) VALUES (?, ?, ?, ?, ?)`,
+          stateId, conversationId, messages, taskId, createdAt, planActivityId
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
         [
           stateId,
           state.conversationId,
           JSON.stringify(state.messages),
           state.taskId,
           state.createdAt,
+          state.planActivityId || null,
         ],
         (err) => {
           if (err) reject(err);
@@ -113,6 +116,7 @@ export class SQLiteConductorStorage {
               messages: JSON.parse(row.messages),
               taskId: row.taskId,
               createdAt: row.createdAt,
+              planActivityId: row.planActivityId,
             });
           }
         }
@@ -138,6 +142,7 @@ export class SQLiteConductorStorage {
               messages: JSON.parse(row.messages),
               taskId: row.taskId,
               createdAt: row.createdAt,
+              planActivityId: row.planActivityId,
             });
           }
         }
@@ -162,6 +167,7 @@ export class SQLiteConductorStorage {
               messages: JSON.parse(row.messages),
               taskId: row.taskId,
               createdAt: row.createdAt,
+              planActivityId: row.planActivityId,
             }));
             resolve(states);
           }
@@ -188,6 +194,7 @@ export class SQLiteConductorStorage {
                 messages: JSON.parse(row.messages),
                 taskId: row.taskId,
                 createdAt: row.createdAt,
+                planActivityId: row.planActivityId,
               };
             });
             resolve(states);
@@ -231,6 +238,51 @@ export class SQLiteConductorStorage {
         (err) => {
           if (err) reject(err);
           else resolve();
+        }
+      );
+    });
+  }
+
+  async setPlanActivityId(
+    taskId: string,
+    planActivityId: string
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // Get the most recent state for this task ID
+      this.db.get<ConversationStateRow>(
+        "SELECT stateId FROM conversation_states WHERE taskId = ? ORDER BY createdAt DESC LIMIT 1",
+        [taskId],
+        (err, row) => {
+          if (err) {
+            reject(err);
+          } else if (!row) {
+            reject(new Error(`No state found for task ID: ${taskId}`));
+          } else {
+            // Update the planActivityId for this state
+            this.db.run(
+              "UPDATE conversation_states SET planActivityId = ? WHERE stateId = ?",
+              [planActivityId, row.stateId],
+              (updateErr) => {
+                if (updateErr) reject(updateErr);
+                else resolve();
+              }
+            );
+          }
+        }
+      );
+    });
+  }
+
+  async getPlanActivityId(taskId: string): Promise<string | null> {
+    return new Promise((resolve, reject) => {
+      // Get the most recent state for this task ID
+      this.db.get<ConversationStateRow>(
+        "SELECT planActivityId FROM conversation_states WHERE taskId = ? ORDER BY createdAt DESC LIMIT 1",
+        [taskId],
+        (err, row) => {
+          if (err) reject(err);
+          else if (!row) resolve(null);
+          else resolve(row.planActivityId || null);
         }
       );
     });
