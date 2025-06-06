@@ -8,7 +8,7 @@ const app = express();
 const port: number = 3000;
 
 // Define a route for the root path ('/')
-app.get("/", (req: Request, res: Response) => {
+app.get("/", (_req: Request, res: Response) => {
   // Send a response to the client
   res.send("Hello, TypeScript + Node.js + Express!");
 });
