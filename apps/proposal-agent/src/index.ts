@@ -1,5 +1,5 @@
-import { ActivityLike } from "@microsoft/spark.api";
-import { App, HttpPlugin } from "@microsoft/spark.apps";
+import { ActivityLike } from "@microsoft/teams.api";
+import { App, HttpPlugin } from "@microsoft/teams.apps";
 import { logger } from "@repo/common";
 import { AgentRuntime } from "@repo/simple-agent-runtime";
 import assert from "assert";

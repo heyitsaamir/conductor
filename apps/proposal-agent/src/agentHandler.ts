@@ -149,7 +149,7 @@ If you do not have any of that, you should ask for it.
 
     try {
       const result = await generateObject({
-        model: this.openai("gpt-4o"),
+        model: this.openai(process.env.AZURE_OPENAI_MODEL_DEPLOYMENT_NAME!),
         messages: aiMessages,
         schema: proposalResponseSchema,
       });

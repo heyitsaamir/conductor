@@ -1,6 +1,6 @@
 import { createAzure } from "@ai-sdk/azure";
-import { toActivityParams } from "@microsoft/spark.api";
-import { App } from "@microsoft/spark.apps";
+import { toActivityParams } from "@microsoft/teams.api";
+import { App } from "@microsoft/teams.apps";
 import {
   BaseAgent,
   ExactMessage,

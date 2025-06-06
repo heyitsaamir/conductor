@@ -1,4 +1,4 @@
-import { ActivityLike } from "@microsoft/spark.api";
+import { ActivityLike } from "@microsoft/teams.api";
 import { Task } from "@repo/task-management-interfaces";
 
 type StatusIcon = {

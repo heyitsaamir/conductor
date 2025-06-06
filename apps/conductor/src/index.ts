@@ -1,6 +1,10 @@
-import { ActivityLike, MentionEntity } from "@microsoft/spark.api";
-import { App, HttpPlugin } from "@microsoft/spark.apps";
-import { DevtoolsPlugin } from "@microsoft/spark.dev";
+import {
+  ActivityLike,
+  MentionEntity,
+  MessageActivity
+} from "@microsoft/teams.api";
+import { App, HttpPlugin } from "@microsoft/teams.apps";
+import { DevtoolsPlugin } from "@microsoft/teams.dev";
 import { Message, MessageInitiator, Runtime } from "@repo/agent-contract";
 import { logger } from "@repo/common";
 import bodyParser from "body-parser";

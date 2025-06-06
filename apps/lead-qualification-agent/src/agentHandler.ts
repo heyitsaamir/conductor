@@ -1,5 +1,5 @@
 import { AzureOpenAIProvider, createAzure } from "@ai-sdk/azure";
-import { ActivityLike } from "@microsoft/spark.api";
+import { ActivityLike } from "@microsoft/teams.api";
 import {
   BaseAgent,
   ExactMessage,
